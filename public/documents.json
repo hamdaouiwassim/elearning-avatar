@@ -1,0 +1,57 @@
+[
+  {
+    "id": 1,
+    "title": "Introduction to React",
+    "description": "Learn the fundamentals of React, including components, props, and state management.",
+    "category": "Web Development",
+    "duration": "4 hours",
+    "level": "Beginner",
+    "pdfUrl": "/documents/react-intro.pdf"
+  },
+  {
+    "id": 2,
+    "title": "Advanced JavaScript",
+    "description": "Deep dive into advanced JavaScript concepts like closures, promises, and async/await.",
+    "category": "Programming",
+    "duration": "6 hours",
+    "level": "Advanced",
+    "pdfUrl": "/documents/js-advanced.pdf"
+  },
+  {
+    "id": 3,
+    "title": "Three.js Fundamentals",
+    "description": "Create stunning 3D graphics and animations in the browser with Three.js.",
+    "category": "3D Graphics",
+    "duration": "5 hours",
+    "level": "Intermediate",
+    "pdfUrl": "/documents/threejs-fundamentals.pdf"
+  },
+  {
+    "id": 4,
+    "title": "Machine Learning Basics",
+    "description": "Introduction to machine learning concepts, algorithms, and practical applications.",
+    "category": "AI/ML",
+    "duration": "8 hours",
+    "level": "Beginner",
+    "pdfUrl": "/documents/ml-basics.pdf"
+  },
+  {
+    "id": 5,
+    "title": "Web Design Principles",
+    "description": "Master the principles of good web design, including layout, typography, and color theory.",
+    "category": "Design",
+    "duration": "3 hours",
+    "level": "Beginner",
+    "pdfUrl": "/documents/web-design.pdf"
+  },
+  {
+    "id": 6,
+    "title": "Node.js Backend Development",
+    "description": "Build scalable backend applications using Node.js, Express, and MongoDB.",
+    "category": "Backend",
+    "duration": "7 hours",
+    "level": "Intermediate",
+    "pdfUrl": "/documents/nodejs-backend.pdf"
+  }
+]
+
