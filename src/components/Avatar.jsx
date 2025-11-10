@@ -234,9 +234,17 @@ export function Avatar(props) {
         clearInterval(animationChangeIntervalRef.current);
         animationChangeIntervalRef.current = null;
       }
-      // Reset to idle when not speaking
-      if (!isAudioPlaying && idleAnimationName && actions && actions[idleAnimationName]) {
-        setAnimation(idleAnimationName);
+      // Stop all animations when not speaking (empty animation instead of idle)
+      if (!isAudioPlaying && actions) {
+        // Stop all running animations
+        Object.values(actions).forEach(action => {
+          if (action && action.isRunning()) {
+           // action.fadeOut(0.5);
+            action.stop();
+          }
+        });
+        // Set animation to empty string to have no animation
+        setAnimation("");
       }
       return;
     }
