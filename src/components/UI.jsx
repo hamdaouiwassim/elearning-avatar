@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useChat } from "../hooks/useChat";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -22,8 +22,37 @@ export const UI = ({
   pdfNumPages,
   ...props
 }) => {
-  const { chat, loading, cameraZoomed, setCameraZoomed, message, avatarPosition, setAvatarPosition } = useChat();
+  const { chat, loading, cameraZoomed, setCameraZoomed, message, avatarPosition, setAvatarPosition, setAudioElement, setAudioId, audioElement, avatarScreenPosition } = useChat();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  
+  // Monitor audio playback state to detect when avatar is speaking
+  useEffect(() => {
+    if (!audioElement) {
+      setIsSpeaking(false);
+      return;
+    }
+
+    const checkAudioState = () => {
+      const playing = !audioElement.paused && !audioElement.ended && audioElement.currentTime > 0;
+      setIsSpeaking(playing);
+    };
+
+    // Check initial state
+    checkAudioState();
+
+    // Listen to audio events
+    const events = ['play', 'pause', 'ended', 'timeupdate'];
+    events.forEach(event => {
+      audioElement.addEventListener(event, checkAudioState);
+    });
+
+    return () => {
+      events.forEach(event => {
+        audioElement.removeEventListener(event, checkAudioState);
+      });
+    };
+  }, [audioElement]);
   const [isPaused, setIsPaused] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
   const [audioData, setAudioData] = useState(null);
@@ -60,6 +89,10 @@ export const UI = ({
   const [suggestions, setSuggestions] = useState([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [duplicateQuestion, setDuplicateQuestion] = useState(null);
+  
+  // Page timing synchronization state
+  const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number}
+  const [hasPlayedOnce, setHasPlayedOnce] = useState(false); // Track if audio has been played for current document
 
   // Get saved position for document
   const getSavedPosition = (docId) => {
@@ -72,6 +105,59 @@ export const UI = ({
   const savePosition = (docId, position) => {
     if (!docId || !isDocumentAudio) return;
     localStorage.setItem(`audio_position_${docId}`, position.toString());
+  };
+
+  // Fetch page timing metadata for synchronization
+  const fetchPageTimings = useCallback(async (docId) => {
+    if (!docId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/documents/${docId}/page-timings`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Expected format: [{page: 1, time: 0}, {page: 2, time: 30.5}, ...]
+        // Or: {timings: [...], pages: [...]}
+        if (Array.isArray(data)) {
+          setPageTimings(data);
+        } else if (data.timings && Array.isArray(data.timings)) {
+          setPageTimings(data.timings);
+        } else if (data.pages && Array.isArray(data.pages)) {
+          // Convert pages array to timings format if needed
+          const timings = data.pages.map((pageData, index) => ({
+            page: pageData.page || index + 1,
+            time: pageData.time || pageData.startTime || 0,
+          }));
+          setPageTimings(timings);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching page timings:", error);
+      // If endpoint doesn't exist, we'll just skip synchronization
+    }
+  }, []);
+
+  // Get the current PDF page based on audio time
+  const getPageForTime = (currentTime) => {
+    if (!pageTimings || pageTimings.length === 0) return null;
+    
+    // Sort timings by time (should already be sorted, but just in case)
+    const sortedTimings = [...pageTimings].sort((a, b) => a.time - b.time);
+    
+    // Find the appropriate page for current time
+    for (let i = sortedTimings.length - 1; i >= 0; i--) {
+      if (currentTime >= sortedTimings[i].time) {
+        return sortedTimings[i].page;
+      }
+    }
+    
+    // If time is before first timing, return first page
+    return sortedTimings[0]?.page || 1;
   };
 
   // Reset audio when document changes
@@ -87,21 +173,33 @@ export const UI = ({
       setSummaryText(null); // Clear summary when document changes
       setQuestionHistory([]); // Clear question history when document changes
       setAnswerText(null); // Clear answer text when document changes
+      setPageTimings([]); // Reset page timings
+      setHasPlayedOnce(false); // Reset play flag for new document
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
       }
+      // Clear audio context for Avatar
+      setAudioElement(null);
+      setAudioId(null);
       // Clear position save interval
       if (positionSaveIntervalRef.current) {
         clearInterval(positionSaveIntervalRef.current);
         positionSaveIntervalRef.current = null;
       }
+      
+      // Clear saved position for this document so it starts from beginning on load
+      if (selectedCourse.id) {
+        localStorage.removeItem(`audio_position_${selectedCourse.id}`);
+        // Fetch page timings for synchronization
+        fetchPageTimings(selectedCourse.id);
+      }
     }
-  }, [selectedCourse?.id]);
+  }, [selectedCourse?.id, fetchPageTimings, setAudioElement, setAudioId]);
 
   const handlePlay = async () => {
     if (!selectedCourse || !selectedCourse.id) {
-      alert("No document selected");
+      alert("Aucun document sélectionné");
       return;
     }
 
@@ -118,20 +216,44 @@ export const UI = ({
         audioRef.current.load();
       }
       
-      // Restore saved position
-      const savedPosition = getSavedPosition(selectedCourse.id);
-      if (savedPosition > 0) {
-        audioRef.current.currentTime = savedPosition;
+      // Set audio element and ID in context for Avatar libsync
+      setAudioElement(audioRef.current);
+      setAudioId(selectedCourse.id);
+      
+      // On first play after document load, start from beginning; otherwise resume from saved position
+      if (!hasPlayedOnce) {
+        audioRef.current.currentTime = 0;
+        setHasPlayedOnce(true);
+        // Reset to first page
+        if (pdfNumPages && setPdfPageNumber) {
+          setPdfPageNumber(1);
+        }
+      } else {
+        // Restore saved position for subsequent plays
+        const savedPosition = getSavedPosition(selectedCourse.id);
+        if (savedPosition > 0) {
+          audioRef.current.currentTime = savedPosition;
+        }
       }
       
       setIsDocumentAudio(true);
+      
+      // Sync initial page when starting playback
+      if (audioRef.current && pageTimings.length > 0 && pdfNumPages) {
+        const currentTime = audioRef.current.currentTime;
+        const targetPage = getPageForTime(currentTime);
+        if (targetPage && targetPage >= 1 && targetPage <= pdfNumPages) {
+          setPdfPageNumber(targetPage);
+        }
+      }
+      
       audioRef.current.play();
       setIsPlaying(true);
       setIsPaused(false);
       
       // Start saving position periodically
       if (positionSaveIntervalRef.current) {
-        clearInterval(positionSaveIntervalRef.current);
+clearInterval(positionSaveIntervalRef.current);
       }
       positionSaveIntervalRef.current = setInterval(() => {
         if (audioRef.current && isDocumentAudio && !audioRef.current.paused) {
@@ -204,13 +326,37 @@ export const UI = ({
         // Store document audio source
         setDocumentAudioSrc(audioSrc);
         
-        // Restore saved position
-        const savedPosition = getSavedPosition(audioId);
-        if (savedPosition > 0) {
-          audioRef.current.currentTime = savedPosition;
+        // Set audio element and ID in context for Avatar libsync
+        setAudioElement(audioRef.current);
+        setAudioId(audioId);
+        
+        // On first play after document load, start from beginning; otherwise resume from saved position
+        if (!hasPlayedOnce) {
+          audioRef.current.currentTime = 0;
+          setHasPlayedOnce(true);
+          // Reset to first page
+          if (pdfNumPages && setPdfPageNumber) {
+            setPdfPageNumber(1);
+          }
+        } else {
+          // Restore saved position for subsequent plays
+          const savedPosition = getSavedPosition(audioId);
+          if (savedPosition > 0) {
+            audioRef.current.currentTime = savedPosition;
+          }
         }
         
         setIsDocumentAudio(true);
+        
+        // Sync initial page when starting playback
+        if (audioRef.current && pageTimings.length > 0 && pdfNumPages) {
+          const currentTime = audioRef.current.currentTime;
+          const targetPage = getPageForTime(currentTime);
+          if (targetPage && targetPage >= 1 && targetPage <= pdfNumPages) {
+            setPdfPageNumber(targetPage);
+          }
+        }
+        
         await audioRef.current.play();
         setIsPlaying(true);
         setIsPaused(false);
@@ -227,7 +373,7 @@ export const UI = ({
       }
     } catch (error) {
       console.error("Error fetching TTS:", error);
-      alert("Failed to generate audio. Please try again.");
+      alert("Échec de la génération audio. Veuillez réessayer.");
     } finally {
       setTtsLoading(false);
     }
@@ -261,7 +407,7 @@ export const UI = ({
 
   const handleSummary = async () => {
     if (!selectedCourse || !selectedCourse.id) {
-      alert("No document selected");
+      alert("Aucun document sélectionné");
       return;
     }
 
@@ -379,7 +525,7 @@ export const UI = ({
       }
     } catch (error) {
       console.error("Error fetching summary:", error);
-      alert("Failed to load summary. Please try again.");
+      alert("Échec du chargement du résumé. Veuillez réessayer.");
     } finally {
       setTtsLoading(false);
       setSummaryLoading(false);
@@ -388,7 +534,7 @@ export const UI = ({
 
   const handleAnalyze = async () => {
     if (!selectedCourse || !selectedCourse.id) {
-      alert("No document selected");
+      alert("Aucun document sélectionné");
       return;
     }
 
@@ -444,7 +590,7 @@ export const UI = ({
       }
     } catch (error) {
       console.error("Error analyzing document:", error);
-      alert("Failed to analyze document. Please try again.");
+      alert("Échec de l'analyse du document. Veuillez réessayer.");
     } finally {
       setAnalysisLoading(false);
     }
@@ -645,7 +791,7 @@ export const UI = ({
       }
     } catch (error) {
       console.error("Error submitting question:", error);
-      alert("Failed to submit question. Please try again.");
+      alert("Échec de l'envoi de la question. Veuillez réessayer.");
     } finally {
       setTtsLoading(false);
     }
@@ -691,7 +837,7 @@ export const UI = ({
       setIsRecording(true);
     } catch (error) {
       console.error("Error accessing microphone:", error);
-      alert("Could not access microphone. Please check permissions.");
+      alert("Impossible d'accéder au microphone. Veuillez vérifier les permissions.");
     }
   };
 
@@ -741,7 +887,7 @@ export const UI = ({
       }
     } catch (error) {
       console.error("Error playing history answer:", error);
-      alert("Failed to play answer audio.");
+        alert("Échec de la lecture de l'audio de la réponse.");
     }
   };
 
@@ -757,11 +903,19 @@ export const UI = ({
     };
 
     const zoomIn = () => {
-      setScale((prev) => Math.min(prev + 0.2, 3.0));
+      setScale((prev) => {
+        const newScale = Math.min(prev + 0.2, 3.0);
+        console.log('Zoom In:', prev, '->', newScale);
+        return newScale;
+      });
     };
 
     const zoomOut = () => {
-      setScale((prev) => Math.max(prev - 0.2, 0.5));
+      setScale((prev) => {
+        const newScale = Math.max(prev - 0.2, 0.5);
+        console.log('Zoom Out:', prev, '->', newScale);
+        return newScale;
+      });
     };
 
     const handleSliderChange = (event) => {
@@ -772,69 +926,79 @@ export const UI = ({
     if (!selectedCourse || !numPages) return null;
 
     return (
-      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 pointer-events-auto">
-        <div className="bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border-2 border-pink-200 p-4 min-w-[400px]">
-          {/* Page Navigation */}
-          <div className="flex items-center justify-between gap-4 mb-3">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={goToPreviousPage}
-                disabled={pageNumber <= 1}
-                className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-md transition-colors text-sm"
-              >
-                ←
-              </button>
-              <span className="text-gray-700 font-medium whitespace-nowrap text-sm">
-                Page {pageNumber} {numPages && `of ${numPages}`}
+      <div className="fixed top-1/2 left-4 transform -translate-y-1/2 z-40 pointer-events-auto">
+        <div className="bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border-2 border-pink-200 p-4">
+          {/* Vertical Layout */}
+          <div className="flex flex-col gap-3">
+            {/* Page Navigation */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={goToPreviousPage}
+                  disabled={pageNumber <= 1}
+                  className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-md transition-colors text-sm"
+                >
+                  ↑
+                </button>
+              </div>
+              <span className="text-gray-700 font-medium whitespace-nowrap text-sm text-center">
+                Page {pageNumber} {numPages && `sur ${numPages}`}
               </span>
-              <button
-                onClick={goToNextPage}
-                disabled={pageNumber >= (numPages || 1)}
-                className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-md transition-colors text-sm"
-              >
-                →
-              </button>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={goToNextPage}
+                  disabled={pageNumber >= (numPages || 1)}
+                  className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-md transition-colors text-sm"
+                >
+                  ↓
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={zoomOut}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md transition-colors text-sm"
-              >
-                −
-              </button>
-              <span className="text-gray-700 font-medium text-sm min-w-[3rem] text-center">
-                {Math.round(scale * 100)}%
-              </span>
+            
+            {/* Page Slider - Vertical */}
+            {numPages && numPages > 1 && (
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-gray-600 text-xs font-medium">
+                  {numPages}
+                </span>
+                <input
+                  type="range"
+                  min="1"
+                  max={numPages}
+                  value={pageNumber}
+                  onChange={handleSliderChange}
+                  className="w-2 h-32 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-vertical"
+                  style={{
+                    background: `linear-gradient(to bottom, #ec4899 0%, #ec4899 ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb 100%)`,
+                    writingMode: 'vertical-lr',
+                    transform: 'rotate(180deg)',
+                  }}
+                />
+                <span className="text-gray-600 text-xs font-medium">
+                  1
+                </span>
+              </div>
+            )}
+            
+            {/* Zoom Controls */}
+            <div className="flex flex-col items-center gap-2 border-t border-gray-200 pt-3">
               <button
                 onClick={zoomIn}
                 className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md transition-colors text-sm"
               >
                 +
               </button>
+              <span className="text-gray-700 font-medium text-sm min-w-[3rem] text-center">
+                {Math.round(scale * 100)}%
+              </span>
+              <button
+                onClick={zoomOut}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md transition-colors text-sm"
+              >
+                −
+              </button>
             </div>
           </div>
-          {/* Page Slider */}
-          {numPages && numPages > 1 && (
-            <div className="flex items-center gap-3">
-              <span className="text-gray-600 text-xs font-medium min-w-[1.5rem]">
-                1
-              </span>
-              <input
-                type="range"
-                min="1"
-                max={numPages}
-                value={pageNumber}
-                onChange={handleSliderChange}
-                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                style={{
-                  background: `linear-gradient(to right, #ec4899 0%, #ec4899 ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb 100%)`,
-                }}
-              />
-              <span className="text-gray-600 text-xs font-medium min-w-[1.5rem] text-right">
-                {numPages}
-              </span>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -871,12 +1035,12 @@ export const UI = ({
                     d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
                   />
                 </svg>
-                Reponse à votre question :
+                Réponse à votre question :
               </h3>
               <button
                 onClick={() => setAnswerText(null)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
-                title="Close"
+                title="Fermer"
               >
                 <svg
                   className="w-5 h-5"
@@ -907,7 +1071,7 @@ export const UI = ({
                 >
                   <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                 </svg>
-                <span>Playing audio...</span>
+                <span>Lecture audio...</span>
               </div>
             )}
           </div>
@@ -950,12 +1114,12 @@ export const UI = ({
                     d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                   />
                 </svg>
-                Document Analysis
+                Analyse du document
               </h3>
               <button
                 onClick={() => setAnalysisText(null)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
-                title="Close"
+                title="Fermer"
               >
                 <svg
                   className="w-5 h-5"
@@ -986,7 +1150,7 @@ export const UI = ({
                 >
                   <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                 </svg>
-                <span>Playing audio...</span>
+                <span>Lecture audio...</span>
               </div>
             )}
           </div>
@@ -1024,12 +1188,12 @@ export const UI = ({
                     d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
                   />
                 </svg>
-                Document Summary
+                Résumé du document
               </h3>
               <button
                 onClick={() => setSummaryText(null)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
-                title="Close"
+                title="Fermer"
               >
                 <svg
                   className="w-5 h-5"
@@ -1060,7 +1224,7 @@ export const UI = ({
                 >
                   <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                 </svg>
-                <span>Playing audio...</span>
+                <span>Lecture audio...</span>
               </div>
             )}
           </div>
@@ -1075,7 +1239,7 @@ export const UI = ({
               {/* <p>I will always love you ❤️</p> */}
               {selectedCourse && (
                 <p className="text-sm text-gray-600 mt-1">
-                  Learning: {selectedCourse.title}
+                  Apprentissage : {selectedCourse.title}
                 </p>
               )}
             </div>
@@ -1083,7 +1247,7 @@ export const UI = ({
               <button
                 onClick={onBackToHome}
                 className="pointer-events-auto bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md transition-colors flex items-center gap-2"
-                title="Back to Home"
+                title="Retour à l'accueil"
               >
                 <svg
                   className="w-5 h-5"
@@ -1098,7 +1262,7 @@ export const UI = ({
                     d="M10 19l-7-7m0 0l7-7m-7 7h18"
                   />
                 </svg>
-                <span>Home</span>
+                <span>Accueil</span>
               </button>
             )}
           </div>
@@ -1112,7 +1276,7 @@ export const UI = ({
             className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${
               isPlaying || ttsLoading ? "opacity-50" : ""
             }`}
-            title={ttsLoading ? "Generating audio..." : "Play"}
+            title={ttsLoading ? "Génération audio..." : "Lire"}
           >
             {ttsLoading ? (
               <svg
@@ -1176,31 +1340,6 @@ export const UI = ({
             </svg>
           </button>
 
-          {/* Ask Question Button */}
-          <button
-            onClick={handleAskQuestion}
-            disabled={loading || message}
-            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${
-              loading || message ? "opacity-50" : ""
-            }`}
-            title="Ask Question"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-6 h-6"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"
-              />
-            </svg>
-          </button>
-
           {/* Question History Button */}
           <button
             onClick={() => setShowHistoryModal(true)}
@@ -1208,7 +1347,7 @@ export const UI = ({
             className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${
               questionHistory.length === 0 ? "opacity-50" : ""
             }`}
-            title="Question History"
+            title="Historique des questions"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -1233,7 +1372,7 @@ export const UI = ({
             className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${
               !selectedCourse || ttsLoading || summaryLoading ? "opacity-50" : ""
             }`}
-            title="Summary"
+            title="Résumé"
           >
             {(ttsLoading || summaryLoading) ? (
               <svg
@@ -1274,34 +1413,11 @@ export const UI = ({
             )}
           </button>
 
-          {/* Resume Button */}
-          <button
-            onClick={handleResume}
-            disabled={!isPaused}
-            className="pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg"
-            title="Resume"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-6 h-6"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3 8.688c0-.864.933-1.405 1.683-.977l7.108 4.062a1.125 1.125 0 010 1.953l-7.108 4.062A1.125 1.125 0 013 16.81V8.688zM12.75 8.688c0-.864.933-1.405 1.683-.977l7.108 4.062a1.125 1.125 0 010 1.953l-7.108 4.062a1.125 1.125 0 01-1.683-.977V8.688z"
-              />
-            </svg>
-          </button>
-
           {/* Avatar Zoom Button */}
           <button
             onClick={() => setCameraZoomed(!cameraZoomed)}
             className="pointer-events-auto bg-pink-500 hover:bg-pink-600 text-white p-3 md:p-4 rounded-full transition-colors shadow-lg"
-            title={cameraZoomed ? "Zoom Out Avatar" : "Zoom In Avatar"}
+            title={cameraZoomed ? "Dézoomer l'avatar" : "Zoomer l'avatar"}
           >
             {cameraZoomed ? (
               <svg
@@ -1340,7 +1456,7 @@ export const UI = ({
           <button
             onClick={() => setAvatarPosition(avatarPosition === "center" ? "right" : "center")}
             className="pointer-events-auto bg-pink-500 hover:bg-pink-600 text-white p-3 md:p-4 rounded-full transition-colors shadow-lg"
-            title={avatarPosition === "right" ? "Move Avatar to Center" : "Move Avatar to Right"}
+            title={avatarPosition === "right" ? "Déplacer l'avatar au centre" : "Déplacer l'avatar à droite"}
           >
             {avatarPosition === "right" ? (
               <svg
@@ -1378,6 +1494,17 @@ export const UI = ({
           {/* Hidden audio element to control playback */}
           <audio
             ref={audioRef}
+            onTimeUpdate={() => {
+              // Synchronize PDF page with audio time (only for document audio)
+              if (isDocumentAudio && audioRef.current && pageTimings.length > 0 && pdfNumPages) {
+                const currentTime = audioRef.current.currentTime;
+                const targetPage = getPageForTime(currentTime);
+                
+                if (targetPage && targetPage !== pdfPageNumber && targetPage >= 1 && targetPage <= pdfNumPages) {
+                  setPdfPageNumber(targetPage);
+                }
+              }
+            }}
             onEnded={() => {
               setIsPlaying(false);
               setIsPaused(false);
@@ -1409,6 +1536,7 @@ export const UI = ({
           />
         </div>
       </div>
+
       {/* PDF Controls - Floating Overlay */}
       {selectedCourse && pdfPageNumber && setPdfPageNumber && (
         <PDFControls
@@ -1426,7 +1554,7 @@ export const UI = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center pointer-events-auto">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">Ask a Question</h2>
+              <h2 className="text-2xl font-bold text-gray-800">Poser une question</h2>
               <button
                 onClick={handleCloseModal}
                 className="text-gray-500 hover:text-gray-700"
@@ -1450,7 +1578,7 @@ export const UI = ({
             {/* Text Input */}
             <div className="mb-4 relative">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Type your question:
+                Tapez votre question :
               </label>
               <textarea
                 value={questionText}
@@ -1472,7 +1600,7 @@ export const UI = ({
                     }
                   }
                 }}
-                placeholder="Enter your question here..."
+                placeholder="Entrez votre question ici..."
                 className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none ${
                   duplicateQuestion ? "border-yellow-500" : "border-gray-300"
                 }`}
@@ -1544,7 +1672,7 @@ export const UI = ({
             {/* Recorded Audio Preview */}
             {recordedAudio && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600 mb-2">Recorded Audio:</p>
+                <p className="text-sm text-gray-600 mb-2">Audio enregistré :</p>
                 <audio src={recordedAudio.url} controls className="w-full" />
               </div>
             )}
@@ -1570,7 +1698,7 @@ export const UI = ({
                     >
                       <circle cx="12" cy="12" r="10" />
                     </svg>
-                    <span>Stop Recording</span>
+                    <span>Arrêter l'enregistrement</span>
                   </>
                 ) : (
                   <>
@@ -1582,7 +1710,7 @@ export const UI = ({
                       <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                       <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
                     </svg>
-                    <span>Record Audio</span>
+                    <span>Enregistrer l'audio</span>
                   </>
                 )}
               </button>
@@ -1619,10 +1747,10 @@ export const UI = ({
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       ></path>
                     </svg>
-                    <span>Submitting...</span>
+                    <span>Envoi en cours...</span>
                   </>
                 ) : (
-                  "Submit"
+                  "Envoyer"
                 )}
               </button>
             </div>
@@ -1635,7 +1763,7 @@ export const UI = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center pointer-events-auto">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">Question History</h2>
+              <h2 className="text-2xl font-bold text-gray-800">Historique des questions</h2>
               <button
                 onClick={() => setShowHistoryModal(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -1659,7 +1787,7 @@ export const UI = ({
             {/* History List */}
             <div className="flex-1 overflow-y-auto pr-2 space-y-4">
               {questionHistory.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No questions asked yet.</p>
+                <p className="text-gray-500 text-center py-8">Aucune question posée pour le moment.</p>
               ) : (
                 questionHistory.map((entry) => (
                   <div
@@ -1682,7 +1810,7 @@ export const UI = ({
                               d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"
                             />
                           </svg>
-                          <p className="font-semibold text-gray-800 text-sm">Question:</p>
+                          <p className="font-semibold text-gray-800 text-sm">Question :</p>
                           <span className="text-xs text-gray-500">
                             {new Date(entry.timestamp).toLocaleString()}
                           </span>
@@ -1712,7 +1840,7 @@ export const UI = ({
                       <button
                         onClick={() => handlePlayHistoryAnswer(entry)}
                         className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-md transition-colors flex items-center gap-2 text-sm"
-                        title="Play Answer"
+                        title="Lire la réponse"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -1728,7 +1856,7 @@ export const UI = ({
                             d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"
                           />
                         </svg>
-                        Play Answer
+                        Lire la réponse
                       </button>
                     </div>
                   </div>
@@ -1738,6 +1866,32 @@ export const UI = ({
           </div>
         </div>
       )}
+
+      {/* Prominent Ask Button - Fixed Top Right */}
+      <button
+        onClick={handleAskQuestion}
+        className="fixed top-16 right-64 z-[100] pointer-events-auto bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-5 py-4 sm:px-6 sm:py-4 rounded-full transition-all duration-200 shadow-2xl flex items-center gap-2 sm:gap-3 font-semibold text-base sm:text-lg hover:scale-110 active:scale-95 group"
+        title="Poser une question"
+      >
+        {/* Subtle glow effect */}
+        <span className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-75 blur-xl group-hover:opacity-100 transition-opacity duration-300 -z-10"></span>
+        
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={2.5}
+          stroke="currentColor"
+          className="w-6 h-6 sm:w-7 sm:h-7"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"
+          />
+        </svg>
+        <span className="hidden sm:inline font-bold">Demander</span>
+      </button>
     </>
   );
 };

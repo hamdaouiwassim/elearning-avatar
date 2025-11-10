@@ -50,7 +50,7 @@ export const Home = ({ onStartLearning }) => {
       <div className="min-h-screen bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-pink-500 mx-auto mb-4"></div>
-          <p className="text-xl text-gray-700">Loading documents...</p>
+          <p className="text-xl text-gray-700">Chargement des documents...</p>
         </div>
       </div>
     );
@@ -60,13 +60,13 @@ export const Home = ({ onStartLearning }) => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200 flex items-center justify-center">
         <div className="text-center bg-white p-8 rounded-xl shadow-lg">
-          <p className="text-xl text-red-600 mb-4">Error loading documents</p>
+          <p className="text-xl text-red-600 mb-4">Erreur lors du chargement des documents</p>
           <p className="text-gray-600">{error}</p>
           <button
             onClick={() => window.location.reload()}
             className="mt-4 bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg"
           >
-            Retry
+            Réessayer
           </button>
         </div>
       </div>
@@ -82,7 +82,7 @@ export const Home = ({ onStartLearning }) => {
             Titan Academy
           </h1>
           <p className="text-xl text-gray-600">
-            Choose a document and start learning with your virtual assistant
+            Choisissez un document et commencez à apprendre avec votre assistant virtuel
           </p>
         </div>
 
@@ -108,7 +108,7 @@ export const Home = ({ onStartLearning }) => {
                   {doc.title}
                 </h3>
                 <p className="text-gray-600 mb-4 line-clamp-4 text-sm">
-                  {doc.text ? doc.text.substring(0, 200) + "..." : "No description available"}
+                  {doc.text ? doc.text.substring(0, 200) + "..." : "Aucune description disponible"}
                 </p>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center text-gray-500 text-sm">
@@ -125,7 +125,7 @@ export const Home = ({ onStartLearning }) => {
                         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                    <span>{doc.filename || "PDF Document"}</span>
+                    <span>{doc.filename || "Document PDF"}</span>
                   </div>
                   {doc.length && (
                     <span className="text-xs text-gray-500">
@@ -137,7 +137,7 @@ export const Home = ({ onStartLearning }) => {
                   onClick={() => onStartLearning(doc)}
                   className="w-full bg-pink-500 hover:bg-pink-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                  <span>Start Learning</span>
+                  <span>Commencer l'apprentissage</span>
                   <svg
                     className="w-5 h-5"
                     fill="none"
@@ -159,7 +159,7 @@ export const Home = ({ onStartLearning }) => {
 
         {documents.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-xl text-gray-600">No documents available.</p>
+            <p className="text-xl text-gray-600">Aucun document disponible.</p>
           </div>
         )}
       </div>

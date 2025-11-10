@@ -4,9 +4,9 @@ Command: npx gltfjsx@6.2.3 public/models/64f1a714fe61576b46f27ca2.glb -o src/com
 */
 
 import { useAnimations, useGLTF } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { button, useControls } from "leva";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 
 import * as THREE from "three";
 import { useChat } from "../hooks/useChat";
@@ -111,39 +111,251 @@ export function Avatar(props) {
     "/models/64f1a714fe61576b46f27ca2.glb"
   );
 
-  const { message, onMessagePlayed, chat } = useChat();
+  const { message, onMessagePlayed, chat, audioElement, audioId } = useChat();
+  const { camera } = useThree();
 
-  const [lipsync, setLipsync] = useState();
+  const [lipsync, setLipsync] = useState(null);
+  
+  // Head tracking refs
+  const headBoneRef = useRef(null);
+  const initialHeadRotation = useRef(new THREE.Quaternion());
 
   useEffect(() => {
-    console.log(message);
-    if (!message) {
-      setAnimation("Idle");
-      return;
-    }
-    setAnimation(message.animation);
-    setFacialExpression(message.facialExpression);
-    setLipsync(message.lipsync);
-    const audio = new Audio("data:audio/mp3;base64," + message.audio);
-    audio.play();
-    setAudio(audio);
-    audio.onended = onMessagePlayed;
+    // console.log(message);
+    // if (!message) {
+    //   setAnimation("Idle");
+    //   return;
+    // }
+    // setAnimation(message.animation);
+    // setFacialExpression(message.facialExpression);
+    // setLipsync(message.lipsync);
+    // const audio = new Audio("data:audio/mp3;base64," + message.audio);
+    // audio.play();
+    // setAudio(audio);
+    // audio.onended = onMessagePlayed;
   }, [message]);
 
   const { animations } = useGLTF("/models/animations.glb");
 
   const group = useRef();
   const { actions, mixer } = useAnimations(animations, group);
-  const [animation, setAnimation] = useState(
-    animations.find((a) => a.name === "Idle") ? "Idle" : animations[0].name // Check if Idle animation exists otherwise use first animation
-  );
+  
+  // Log all available animations
   useEffect(() => {
-    actions[animation]
-      .reset()
-      .fadeIn(mixer.stats.actions.inUse === 0 ? 0 : 0.5)
-      .play();
-    return () => actions[animation].fadeOut(0.5);
-  }, [animation]);
+    if (animations && animations.length > 0) {
+      console.log("=== Available Avatar Animations ===");
+      animations.forEach((anim, index) => {
+        console.log(`${index + 1}. ${anim.name}`);
+      });
+      console.log(`Total: ${animations.length} animations`);
+      console.log("===================================");
+    }
+  }, [animations]);
+  
+  // Find available animation names - memoized to avoid dependency issues
+  const { idleAnimationName, talkingAnimations } = useMemo(() => {
+    if (!animations || animations.length === 0) {
+      return {
+        idleAnimationName: "",
+        talkingAnimations: []
+      };
+    }
+    const idleAnim = animations.find((a) => a.name === "Idle" || a.name === "Standing Idle");
+    const talkingAnims = animations.filter((a) => {
+      const nameLower = a.name.toLowerCase();
+      // Include only Talking_0, exclude Talking_1 and Talking_2
+      return (nameLower.includes("talking_0") || nameLower.includes("talking0")) &&
+             !nameLower.includes("talking_1") &&
+             !nameLower.includes("talking1") &&
+             !nameLower.includes("talking_2") &&
+             !nameLower.includes("talking2");
+    }).sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      idleAnimationName: idleAnim ? idleAnim.name : (animations[0]?.name || ""),
+      talkingAnimations: talkingAnims
+    };
+  }, [animations]);
+  
+  const [animation, setAnimation] = useState(() => {
+    // Initialize with first available animation or empty string
+    return animations && animations.length > 0 
+      ? (animations.find((a) => a.name === "Idle" || a.name === "Standing Idle")?.name || animations[0]?.name || "")
+      : "";
+  });
+  
+  // Update initial animation when animations load - always start with idle
+  useEffect(() => {
+    if (idleAnimationName && (!animation || (animation === "" && idleAnimationName !== ""))) {
+      setAnimation(idleAnimationName);
+    }
+  }, [idleAnimationName, animation]);
+  
+  // Ensure idle animation when there's no audio element
+  useEffect(() => {
+    if (!audioElement && idleAnimationName && animation !== idleAnimationName && actions && actions[idleAnimationName]) {
+      setAnimation(idleAnimationName);
+    }
+  }, [audioElement, idleAnimationName, animation, actions]);
+  
+  // Monitor audio playback state to trigger talking animation
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const talkingAnimationIndexRef = useRef(0);
+  const animationChangeIntervalRef = useRef(null);
+  
+  useEffect(() => {
+    if (!audioElement || !actions || Object.keys(actions).length === 0) return;
+    
+    const checkAudioState = () => {
+      const playing = !audioElement.paused && !audioElement.ended && audioElement.currentTime > 0;
+      setIsAudioPlaying(playing);
+    };
+    
+    // Check initial state
+    checkAudioState();
+    
+    // Listen to audio events
+    const events = ['play', 'pause', 'ended', 'timeupdate'];
+    events.forEach(event => {
+      audioElement.addEventListener(event, checkAudioState);
+    });
+    
+    return () => {
+      events.forEach(event => {
+        audioElement.removeEventListener(event, checkAudioState);
+      });
+    };
+  }, [audioElement, actions]);
+  
+  // Cycle through talking animations while speaking
+  useEffect(() => {
+    if (!isAudioPlaying || !talkingAnimations || talkingAnimations.length === 0 || !actions) {
+      // Clear interval when not speaking
+      if (animationChangeIntervalRef.current) {
+        clearInterval(animationChangeIntervalRef.current);
+        animationChangeIntervalRef.current = null;
+      }
+      // Reset to idle when not speaking
+      if (!isAudioPlaying && idleAnimationName && actions && actions[idleAnimationName]) {
+        setAnimation(idleAnimationName);
+      }
+      return;
+    }
+    
+    // Reset index when starting to speak
+    talkingAnimationIndexRef.current = 0;
+    
+    // Cycle through talking animations every 3-5 seconds
+    const cycleAnimations = () => {
+      if (talkingAnimations.length > 0 && actions) {
+        const currentIndex = talkingAnimationIndexRef.current;
+        const nextIndex = (currentIndex + 1) % talkingAnimations.length;
+        talkingAnimationIndexRef.current = nextIndex;
+        
+        const nextAnimation = talkingAnimations[nextIndex];
+        if (nextAnimation && actions[nextAnimation.name]) {
+          setAnimation(nextAnimation.name);
+        }
+      }
+    };
+    
+    // Set initial talking animation
+    if (talkingAnimations.length > 0) {
+      const initialAnimation = talkingAnimations[0];
+      if (initialAnimation && actions[initialAnimation.name]) {
+        setAnimation(initialAnimation.name);
+      }
+    }
+    
+    // Start cycling - change animation every 3-5 seconds
+    const interval = setInterval(cycleAnimations, 3500 + Math.random() * 2000); // Random between 3.5-5.5 seconds
+    animationChangeIntervalRef.current = interval;
+    
+    return () => {
+      if (animationChangeIntervalRef.current) {
+        clearInterval(animationChangeIntervalRef.current);
+        animationChangeIntervalRef.current = null;
+      }
+    };
+  }, [isAudioPlaying, talkingAnimations, actions, idleAnimationName]);
+  
+  // Track previous animation for smooth transitions
+  const previousAnimationRef = useRef(null);
+  const currentActionRef = useRef(null);
+  
+  // Play the selected animation with smooth transitions
+  useEffect(() => {
+    if (!actions || !animation || !actions[animation]) return;
+    
+    const currentAction = actions[animation];
+    const previousAction = previousAnimationRef.current && actions[previousAnimationRef.current] 
+      ? actions[previousAnimationRef.current] 
+      : null;
+    
+    // If the same animation is already playing, don't restart it (prevents lag on loop)
+    if (currentAction.isRunning() && previousAnimationRef.current === animation) {
+      // Just ensure loop settings are correct
+      currentAction.setLoop(THREE.LoopRepeat);
+      currentAction.setEffectiveTimeScale(1);
+      currentAction.setEffectiveWeight(1);
+      return;
+    }
+    
+    // Set animation properties
+    currentAction.setLoop(THREE.LoopRepeat);
+    currentAction.setEffectiveTimeScale(1);
+    currentAction.setEffectiveWeight(1);
+    
+    // Ensure previous action is properly set up
+    if (previousAction && previousAction !== currentAction) {
+      previousAction.setEffectiveWeight(1);
+    }
+    
+    // Smooth crossfade if there's a previous animation running
+    if (previousAction && previousAction.isRunning() && previousAction !== currentAction) {
+      // Stop any other running actions first (except the previous one)
+      Object.values(actions).forEach(action => {
+        if (action !== previousAction && action !== currentAction && action.isRunning()) {
+          action.fadeOut(0.3);
+        }
+      });
+      
+      // Ensure current action is ready
+      if (!currentAction.isRunning()) {
+        // Don't reset - let it start from where it naturally would
+        currentAction.play();
+      }
+      
+      // Crossfade from previous to current (smooth 1.2 second transition)
+      // Using false to prevent reset on crossfade (reduces lag)
+      previousAction.crossFadeTo(currentAction, 1.2, false);
+    } else {
+      // Fade in from nothing (first animation or no previous)
+      // Stop all other actions first with smooth fade
+      Object.values(actions).forEach(action => {
+        if (action !== currentAction && action.isRunning()) {
+          action.fadeOut(0.8);
+        }
+      });
+      
+      if (!currentAction.isRunning()) {
+        // Only reset if it's truly a new start (not a loop continuation)
+        if (!previousAction || !previousAction.isRunning()) {
+          currentAction.reset();
+        }
+        const fadeTime = mixer.stats.actions.inUse === 0 ? 0 : 1.2;
+        currentAction.fadeIn(fadeTime);
+        currentAction.play();
+      }
+    }
+    
+    // Store references for next transition
+    previousAnimationRef.current = animation;
+    currentActionRef.current = currentAction;
+    
+    return () => {
+      // Cleanup is handled by the crossfade and fadeOut calls above
+    };
+  }, [animation, actions, mixer, talkingAnimations]);
 
   const lerpMorphTarget = (target, value, speed = 0.1) => {
     scene.traverse((child) => {
@@ -176,9 +388,38 @@ export function Avatar(props) {
   const [winkLeft, setWinkLeft] = useState(false);
   const [winkRight, setWinkRight] = useState(false);
   const [facialExpression, setFacialExpression] = useState("");
-  const [audio, setAudio] = useState();
+  const [audio, setAudio] = useState(null);
+
+  // Load libsync JSON file when audioId changes
+  useEffect(() => {
+    if (!audioId) {
+      setLipsync(null);
+      return;
+    }
+
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+    const libsyncUrl = `${API_URL}/audios/${audioId}.json`;
+
+    fetch(libsyncUrl)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load libsync: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        setLipsync(data);
+      })
+      .catch((error) => {
+        console.warn("Failed to load libsync JSON:", error);
+        setLipsync(null);
+      });
+  }, [audioId]);
 
   useFrame(() => {
+    // Mixer is automatically updated by useAnimations hook
+    // But we ensure smooth frame updates
+    
     !setupMode &&
       Object.keys(nodes.EyeLeft.morphTargetDictionary).forEach((key) => {
         const mapping = facialExpressions[facialExpression];
@@ -201,27 +442,95 @@ export function Avatar(props) {
     }
 
     const appliedMorphTargets = [];
-    if (message && lipsync) {
-      const currentAudioTime = audio.currentTime;
+    // Use audioElement from context if available, otherwise fall back to local audio state
+    const currentAudio = audioElement || audio;
+    
+    if (currentAudio && lipsync && lipsync.mouthCues) {
+      const currentAudioTime = currentAudio.currentTime || 0;
+      
+      // Find the active mouth cue for current time
       for (let i = 0; i < lipsync.mouthCues.length; i++) {
         const mouthCue = lipsync.mouthCues[i];
         if (
           currentAudioTime >= mouthCue.start &&
           currentAudioTime <= mouthCue.end
         ) {
-          appliedMorphTargets.push(corresponding[mouthCue.value]);
-          lerpMorphTarget(corresponding[mouthCue.value], 1, 0.2);
+          const visemeKey = corresponding[mouthCue.value];
+          if (visemeKey) {
+            appliedMorphTargets.push(visemeKey);
+            lerpMorphTarget(visemeKey, 1, 0.2);
+          }
           break;
         }
       }
     }
 
+    // Reset all visemes that are not currently active
     Object.values(corresponding).forEach((value) => {
       if (appliedMorphTargets.includes(value)) {
         return;
       }
       lerpMorphTarget(value, 0, 0.1);
     });
+
+    // Head tracking - make avatar look at camera when explaining
+    if (headBoneRef.current && isAudioPlaying && camera) {
+      const headBone = headBoneRef.current;
+      
+      // Update bone matrices
+      headBone.updateWorldMatrix(true, false);
+      
+      // Get head world position
+      const headWorldPosition = new THREE.Vector3();
+      headBone.getWorldPosition(headWorldPosition);
+      
+      // Get camera world position
+      const cameraWorldPosition = new THREE.Vector3();
+      camera.getWorldPosition(cameraWorldPosition);
+      
+      // Calculate direction from head to camera
+      const direction = new THREE.Vector3();
+      direction.subVectors(cameraWorldPosition, headWorldPosition).normalize();
+      
+      // Get parent bone's world matrix to convert to local space
+      const parentBone = headBone.parent;
+      if (parentBone) {
+        parentBone.updateWorldMatrix(true, false);
+        const parentWorldMatrix = new THREE.Matrix4();
+        parentWorldMatrix.copy(parentBone.matrixWorld);
+        const inverseParentMatrix = new THREE.Matrix4();
+        inverseParentMatrix.copy(parentWorldMatrix).invert();
+        
+        // Convert direction to parent's local space
+        const localDirection = direction.clone();
+        localDirection.applyMatrix4(inverseParentMatrix);
+        
+        // Calculate Euler angles from direction
+        const maxAngle = Math.PI / 6; // 30 degrees max
+        const yaw = Math.atan2(localDirection.x, localDirection.z);
+        const pitch = -Math.asin(THREE.MathUtils.clamp(localDirection.y, -1, 1));
+        
+        // Clamp angles
+        const clampedYaw = THREE.MathUtils.clamp(yaw, -maxAngle, maxAngle);
+        const clampedPitch = THREE.MathUtils.clamp(pitch, -maxAngle, maxAngle);
+        
+        // Create target rotation relative to initial
+        const targetEuler = new THREE.Euler(clampedPitch, clampedYaw, 0, 'YXZ');
+        const targetRotation = new THREE.Quaternion();
+        targetRotation.setFromEuler(targetEuler);
+        
+        // Combine with initial rotation
+        const finalRotation = new THREE.Quaternion();
+        finalRotation.multiplyQuaternions(initialHeadRotation.current, targetRotation);
+        
+        // Smoothly interpolate to target rotation
+        headBone.quaternion.slerp(finalRotation, 0.1);
+      }
+    } else if (headBoneRef.current && !isAudioPlaying) {
+      // Return to initial/neutral position when not explaining
+      const headBone = headBoneRef.current;
+      headBone.quaternion.slerp(initialHeadRotation.current, 0.05);
+    }
   });
 
   useControls("FacialExpressions", {
@@ -236,7 +545,7 @@ export function Avatar(props) {
     }),
     animation: {
       value: animation,
-      options: animations.map((a) => a.name),
+      options: animations && animations.length > 0 ? animations.map((a) => a.name) : [],
       onChange: (value) => setAnimation(value),
     },
     facialExpression: {
@@ -291,19 +600,53 @@ export function Avatar(props) {
   );
 
   useEffect(() => {
-    let blinkTimeout;
-    const nextBlink = () => {
-      blinkTimeout = setTimeout(() => {
-        setBlink(true);
-        setTimeout(() => {
-          setBlink(false);
-          nextBlink();
-        }, 200);
-      }, THREE.MathUtils.randInt(1000, 5000));
-    };
-    nextBlink();
-    return () => clearTimeout(blinkTimeout);
-  }, []);
+    console.log("here show ",nodes.Wolf3D_Head.morphTargetDictionary);
+    nodes.Wolf3D_Head.morphTargetInfluences[nodes.Wolf3D_Head.morphTargetDictionary["viseme_O"]]=1
+    
+    // Find the head bone in the skeleton
+    if (nodes.Wolf3D_Head && nodes.Wolf3D_Head.skeleton) {
+      const skeleton = nodes.Wolf3D_Head.skeleton;
+      // Common head bone names in Ready Player Me avatars
+      const headBoneNames = ['Head', 'head', 'Neck', 'neck', 'HeadTop_End', 'headTop_End'];
+      
+      for (const boneName of headBoneNames) {
+        const bone = skeleton.bones.find(b => b.name === boneName || b.name.includes('Head'));
+        if (bone) {
+          headBoneRef.current = bone;
+          console.log("Found head bone:", bone.name);
+          break;
+        }
+      }
+      
+      // If not found, try to find by traversing
+      if (!headBoneRef.current) {
+        skeleton.bones.forEach(bone => {
+          if (bone.name.toLowerCase().includes('head') && !headBoneRef.current) {
+            headBoneRef.current = bone;
+            console.log("Found head bone by search:", bone.name);
+          }
+        });
+      }
+      
+      // Store initial head rotation for reset
+      if (headBoneRef.current) {
+        initialHeadRotation.current.copy(headBoneRef.current.quaternion);
+      }
+    }
+    
+    // let blinkTimeout;
+    // const nextBlink = () => {
+    //   blinkTimeout = setTimeout(() => {
+    //     setBlink(true);
+    //     setTimeout(() => {
+    //       setBlink(false);
+    //       nextBlink();
+    //     }, 200);
+    //   }, THREE.MathUtils.randInt(1000, 5000));
+    // };
+    // nextBlink();
+    // return () => clearTimeout(blinkTimeout);
+  }, [nodes]);
 
   return (
     <group {...props} dispose={null} ref={group}>

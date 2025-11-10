@@ -32,7 +32,8 @@ function App() {
   return (
     <>
       <Loader />
-      <Leva />
+      <Leva hidden />
+      
       {/* PDF Background */}
       {selectedCourse && (
         <PDFBackground
