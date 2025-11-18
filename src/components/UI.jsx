@@ -7,7 +7,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 // Set up the worker for pdfjs
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3002";
 
 export const UI = ({
   hidden,
