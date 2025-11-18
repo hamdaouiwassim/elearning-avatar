@@ -131,7 +131,7 @@ export const Experience = () => {
   }, [cameraZoomed, avatarPosition]);
   
   // Calculate avatar X position - move slightly left when speaking
-  const avatarXPosition = isSpeaking ? -0.3 : 0;
+  const avatarXPosition = isSpeaking ? 0.3 : 0;
 
   return (
     <>
