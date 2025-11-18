@@ -22,7 +22,7 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
     if (document) {
       // If document has id, construct the URL to fetch from API
       if (document.id) {
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3002";
         setFile(`${API_URL}/api/documents/${document.id}/file`);
       } else if (document.pdfUrl) {
         // Fallback to pdfUrl if it exists
