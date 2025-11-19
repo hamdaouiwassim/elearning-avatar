@@ -1015,8 +1015,8 @@ clearInterval(positionSaveIntervalRef.current);
         <div
           className={`fixed top-1/2 transform -translate-y-1/2 z-30 pointer-events-auto transition-all ${
             pdfReaderOpen
-              ? "left-4 w-80 max-w-[calc(33.333%-2rem)]"
-              : "left-4 w-96 max-w-md"
+              ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+              : "right-4 w-96 max-w-md"
           }`}
         >
           <div className="bg-white rounded-xl shadow-2xl p-6 border-2 border-pink-200 max-h-[70vh] flex flex-col">
@@ -1083,8 +1083,8 @@ clearInterval(positionSaveIntervalRef.current);
         <div
           className={`fixed z-30 pointer-events-auto transition-all ${
             pdfReaderOpen
-              ? "left-4 w-80 max-w-[calc(33.333%-2rem)]"
-              : "left-4 w-96 max-w-md"
+              ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+              : "right-4 w-96 max-w-md"
           } ${
             answerText && summaryText
               ? "top-[calc(50%+30rem)] transform -translate-y-0"
@@ -1162,8 +1162,8 @@ clearInterval(positionSaveIntervalRef.current);
         <div
           className={`fixed z-30 pointer-events-auto transition-all ${
             pdfReaderOpen
-              ? "left-4 w-80 max-w-[calc(33.333%-2rem)]"
-              : "left-4 w-96 max-w-md"
+              ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+              : "right-4 w-96 max-w-md"
           } ${
             answerText && analysisText
               ? "top-[calc(50%+30rem)] transform -translate-y-0"
@@ -1238,9 +1238,16 @@ clearInterval(positionSaveIntervalRef.current);
               <h1 className="font-black text-xl">Titan Academy</h1>
               {/* <p>I will always love you ❤️</p> */}
               {selectedCourse && (
-                <p className="text-sm text-gray-600 mt-1">
-                  Apprentissage : {selectedCourse.title}
-                </p>
+                <div className="mt-1">
+                  <p className="text-sm text-gray-600 font-semibold">
+                    Apprentissage : {selectedCourse.courseName || selectedCourse.title}
+                  </p>
+                  {selectedCourse.courseDescription && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                      {selectedCourse.courseDescription}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
             {onBackToHome && (

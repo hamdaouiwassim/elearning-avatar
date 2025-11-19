@@ -98,10 +98,14 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
     <div className="fixed inset-y-0 right-0 w-2/3 bg-white shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="bg-pink-500 text-white p-4 flex items-center justify-between">
-        <div>
-          <h2 className="font-bold text-xl">PDF Reader</h2>
-          {document && (
-            <p className="text-sm text-pink-100 mt-1">{document.title}</p>
+        <div className="flex flex-col">
+          <h2 className="font-bold text-xl">
+            {document?.courseName || document?.title || "Cours"}
+          </h2>
+          {document?.courseDescription && (
+            <p className="text-sm text-pink-100 mt-1 line-clamp-2">
+              {document.courseDescription}
+            </p>
           )}
         </div>
         <button

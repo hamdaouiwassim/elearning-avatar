@@ -130,8 +130,8 @@ export const Experience = () => {
     );
   }, [cameraZoomed, avatarPosition]);
   
-  // Calculate avatar X position - move slightly left when speaking
-  const avatarXPosition = isSpeaking ? 0.3 : 0;
+  // Keep avatar centered so they always face viewers straight-on
+  const avatarXPosition = 0;
 
   return (
     <>

@@ -19,6 +19,8 @@ export const Home = ({ onStartLearning }) => {
         // Handle both array and single object responses
         const documentsArray = Array.isArray(data) ? data : [data];
         setDocuments(documentsArray);
+        console.log("documentsArray",documentsArray);
+        
         setLoading(false);
       })
       .catch((err) => {
@@ -36,13 +38,6 @@ export const Home = ({ onStartLearning }) => {
       month: "short",
       day: "numeric",
     });
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "";
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
   if (loading) {
@@ -96,7 +91,7 @@ export const Home = ({ onStartLearning }) => {
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Document
+                    Cours
                   </span>
                   {doc.timestamp && (
                     <span className="text-xs text-gray-500">
@@ -105,34 +100,25 @@ export const Home = ({ onStartLearning }) => {
                   )}
                 </div>
                 <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                  {doc.title}
+                  {doc.courseName || doc.title}
                 </h3>
                 <p className="text-gray-600 mb-4 line-clamp-4 text-sm">
-                  {doc.text ? doc.text.substring(0, 200) + "..." : "Aucune description disponible"}
+                  {doc.courseDescription
+                    ? `${doc.courseDescription.substring(0, 200)}${
+                        doc.courseDescription.length > 200 ? "..." : ""
+                      }`
+                    : "Aucune description disponible"}
                 </p>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center text-gray-500 text-sm">
-                    <svg
-                      className="w-5 h-5 mr-2"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    <span>{doc.filename || "Document PDF"}</span>
+                {doc.courseDescription && doc.courseDescription.length > 0 && (
+                  <div className="mb-4 text-sm text-gray-500">
+                    <span className="font-semibold text-gray-700">
+                      Aperçu :
+                    </span>{" "}
+                    {doc.courseDescription.length > 220
+                      ? `${doc.courseDescription.substring(0, 220)}...`
+                      : doc.courseDescription}
                   </div>
-                  {doc.length && (
-                    <span className="text-xs text-gray-500">
-                      {formatFileSize(doc.length)}
-                    </span>
-                  )}
-                </div>
+                )}
                 <button
                   onClick={() => onStartLearning(doc)}
                   className="w-full bg-pink-500 hover:bg-pink-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
