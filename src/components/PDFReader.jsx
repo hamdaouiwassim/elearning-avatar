@@ -218,6 +218,13 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
                 scale={scale}
                 renderTextLayer={true}
                 renderAnnotationLayer={true}
+                loading={
+                  <div className="p-8 text-center text-gray-500">
+                    Loading page...
+                  </div>
+                }
+                // Optimize for TV performance
+                devicePixelRatio={window.devicePixelRatio || 1}
               />
             </Document>
           </div>

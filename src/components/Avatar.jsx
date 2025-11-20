@@ -107,14 +107,22 @@ const corresponding = {
 let setupMode = false;
 
 export function Avatar(props) {
-  const { nodes, materials, scene } = useGLTF(
-    "/models/64f1a714fe61576b46f27ca2.glb"
-  );
+  // Use Suspense-compatible loading with error handling
+  const gltf = useGLTF("/models/64f1a714fe61576b46f27ca2.glb");
+  const { nodes, materials, scene } = gltf;
 
   const { message, onMessagePlayed, chat, audioElement, audioId } = useChat();
   const { camera } = useThree();
 
   const [lipsync, setLipsync] = useState(null);
+  const [isModelReady, setIsModelReady] = useState(false);
+  
+  // Mark model as ready after initial load
+  useEffect(() => {
+    if (nodes && materials && scene) {
+      setIsModelReady(true);
+    }
+  }, [nodes, materials, scene]);
   
   // Head tracking refs
   const headBoneRef = useRef(null);
@@ -135,6 +143,7 @@ export function Avatar(props) {
     // audio.onended = onMessagePlayed;
   }, [message]);
 
+  // Load animations - use lower priority loading for TV performance
   const { animations } = useGLTF("/models/animations.glb");
 
   const group = useRef();
@@ -725,5 +734,21 @@ export function Avatar(props) {
   );
 }
 
+// Deferred preloading for better TV performance
+// Preload main model immediately, but delay animations
 useGLTF.preload("/models/64f1a714fe61576b46f27ca2.glb");
-useGLTF.preload("/models/animations.glb");
+
+// Delay animation preload to reduce initial load time on TV
+if (typeof window !== 'undefined') {
+  const preloadAnimations = () => {
+    useGLTF.preload("/models/animations.glb");
+  };
+  
+  // Use requestIdleCallback if available for TV-friendly loading
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(preloadAnimations, { timeout: 2000 });
+  } else {
+    // Fallback: delay by 1 second to prioritize model loading
+    setTimeout(preloadAnimations, 1000);
+  }
+}

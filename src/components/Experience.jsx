@@ -4,11 +4,13 @@ import {
   Environment,
   Text,
 } from "@react-three/drei";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, lazy } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useChat } from "../hooks/useChat";
-import { Avatar } from "./Avatar";
 import * as THREE from "three";
+
+// Lazy load Avatar component for better initial load performance on TV
+const Avatar = lazy(() => import("./Avatar").then(module => ({ default: module.Avatar })));
 
 // Component to track avatar's screen position
 const AvatarScreenPositionTracker = ({ avatarGroup, setScreenPosition, camera }) => {
@@ -146,7 +148,14 @@ export const Experience = () => {
         rotation-y={avatarPosition === "right" ? Math.PI : 0}
         position={[avatarXPosition, 0, 0]}
       >
-        <Avatar />
+        <Suspense fallback={
+          <mesh>
+            <boxGeometry args={[0.5, 2, 0.5]} />
+            <meshStandardMaterial color="gray" />
+          </mesh>
+        }>
+          <Avatar />
+        </Suspense>
       </group>
       
       {/* Calculate avatar screen position for UI button positioning */}
