@@ -2,18 +2,27 @@ import { useState, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { PDFViewerAndroid } from "./PDFViewerAndroid";
 
 // Set up the worker for pdfjs - using local worker file from public directory
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+// Detect Android device
+const isAndroid = /Android/i.test(navigator.userAgent);
 
 export const PDFReader = ({ isOpen, onClose, document }) => {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [file, setFile] = useState(null);
-  const [scale, setScale] = useState(1.0);
+  // Default scale optimized for landscape viewing (slightly larger for better readability)
+  const [scale, setScale] = useState(1.2);
 
-  const onDocumentLoadSuccess = ({ numPages }) => {
-    setNumPages(numPages);
+  const onDocumentLoadSuccess = ({ numPages: loadedNumPages }) => {
+    // Only update if we don't already have a page count from metadata
+    // or if the loaded count is more reliable (not a placeholder)
+    if (!numPages || (loadedNumPages && loadedNumPages < 1000)) {
+      setNumPages(loadedNumPages);
+    }
     setPageNumber(1);
   };
 
@@ -23,6 +32,13 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
       if (document.id) {
         const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
         setFile(`${API_URL}/api/documents/${document.id}/file`);
+        
+        // Try to get page count from document metadata if available
+        if (isAndroid && document.numPagesVisual) {
+          setNumPages(document.numPagesVisual);
+        } else if (isAndroid && document.numPages) {
+          setNumPages(document.numPages);
+        }
       } else if (document.pdfUrl) {
         // Fallback to pdfUrl if it exists
         setFile(document.pdfUrl);
@@ -95,22 +111,24 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-2/3 bg-white shadow-2xl z-50 flex flex-col">
-      {/* Header */}
-      <div className="bg-pink-500 text-white p-4 flex items-center justify-between">
-        <div className="flex flex-col">
-          <h2 className="font-bold text-xl">
-            {document?.courseName || document?.title || "Cours"}
-          </h2>
-          {document?.courseDescription && (
-            <p className="text-sm text-pink-100 mt-1 line-clamp-2">
-              {document.courseDescription}
-            </p>
-          )}
+    <div className="fixed inset-0 bg-white shadow-2xl z-50 flex flex-col landscape-mode">
+      {/* Header - Landscape optimized: horizontal layout */}
+      <div className="bg-pink-500 text-white p-3 lg:p-4 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
+            <h2 className="font-bold text-lg lg:text-xl truncate">
+              {document?.courseName || document?.title || "Cours"}
+            </h2>
+            {document?.courseDescription && (
+              <p className="text-xs lg:text-sm text-pink-100 mt-1 line-clamp-1">
+                {document.courseDescription}
+              </p>
+            )}
+          </div>
         </div>
         <button
           onClick={onClose}
-          className="bg-pink-600 hover:bg-pink-700 px-4 py-2 rounded-md transition-colors"
+          className="bg-pink-600 hover:bg-pink-700 px-3 lg:px-4 py-2 rounded-md transition-colors flex-shrink-0 ml-4"
         >
           Close
         </button>
@@ -128,105 +146,133 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
         </div>
       )}
 
-      {/* Controls */}
+      {/* Controls - Landscape optimized: compact horizontal layout */}
       {file && (
-        <div className="p-4 border-b bg-gray-50 flex flex-col gap-4">
-          {/* Page Navigation */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+        <div className="p-2 lg:p-3 border-b bg-gray-50 flex-shrink-0">
+          {/* Page Navigation - Horizontal compact layout */}
+          <div className="flex items-center justify-between gap-3 lg:gap-4">
+            <div className="flex items-center gap-2 flex-1">
               <button
                 onClick={goToPreviousPage}
                 disabled={pageNumber <= 1}
-                className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md transition-colors"
+                className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded-md transition-colors text-sm lg:text-base"
+                title="Previous page"
               >
-                Previous
+                ←
               </button>
-              <span className="text-gray-700 font-medium whitespace-nowrap">
-                Page {pageNumber} of {numPages}
+              <span className="text-gray-700 font-medium whitespace-nowrap text-sm lg:text-base">
+                Page {pageNumber}{numPages ? ` / ${numPages}` : ''}
               </span>
               <button
                 onClick={goToNextPage}
-                disabled={pageNumber >= numPages}
-                className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md transition-colors"
+                disabled={numPages ? pageNumber >= numPages : false}
+                className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded-md transition-colors text-sm lg:text-base"
+                title="Next page"
               >
-                Next
+                →
               </button>
+              {/* Page Slider - Inline with navigation */}
+              {numPages && numPages > 1 && (
+                <div className="flex items-center gap-2 flex-1 max-w-md ml-2">
+                  <span className="text-gray-600 text-xs font-medium">
+                    1
+                  </span>
+                  <input
+                    type="range"
+                    min="1"
+                    max={numPages}
+                    value={pageNumber}
+                    onChange={handleSliderChange}
+                    className="flex-1 h-1.5 lg:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                    style={{
+                      background: `linear-gradient(to right, #ec4899 0%, #ec4899 ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb 100%)`,
+                    }}
+                  />
+                  <span className="text-gray-600 text-xs font-medium">
+                    {numPages}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={zoomOut}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md transition-colors"
+                className="bg-gray-500 hover:bg-gray-600 text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded-md transition-colors text-sm lg:text-base"
+                title="Zoom out"
               >
-                Zoom Out
+                −
               </button>
-              <span className="text-gray-700 font-medium">
+              <span className="text-gray-700 font-medium text-sm lg:text-base min-w-[3rem] text-center">
                 {Math.round(scale * 100)}%
               </span>
               <button
                 onClick={zoomIn}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md transition-colors"
+                className="bg-gray-500 hover:bg-gray-600 text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded-md transition-colors text-sm lg:text-base"
+                title="Zoom in"
               >
-                Zoom In
+                +
               </button>
             </div>
           </div>
-          {/* Page Slider */}
-          {numPages && numPages > 1 && (
-            <div className="flex items-center gap-3">
-              <span className="text-gray-600 text-sm font-medium min-w-[2rem]">
-                1
-              </span>
-              <input
-                type="range"
-                min="1"
-                max={numPages}
-                value={pageNumber}
-                onChange={handleSliderChange}
-                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                style={{
-                  background: `linear-gradient(to right, #ec4899 0%, #ec4899 ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb 100%)`,
-                }}
-              />
-              <span className="text-gray-600 text-sm font-medium min-w-[2rem] text-right">
-                {numPages}
-              </span>
-            </div>
-          )}
         </div>
       )}
 
-      {/* PDF Viewer */}
-      <div className="flex-1 overflow-auto bg-gray-100 p-4 flex items-center justify-center">
+      {/* PDF Viewer - Landscape optimized: full width, minimal padding */}
+      <div className="flex-1 overflow-auto bg-gray-100 p-2 lg:p-4 flex items-center justify-center landscape-viewer">
         {file ? (
-          <div className="bg-white shadow-lg max-w-full">
-            <Document
-              file={file}
-              onLoadSuccess={onDocumentLoadSuccess}
-              loading={
-                <div className="p-8 text-center text-gray-600">
-                  Loading PDF...
-                </div>
-              }
-              error={
-                <div className="p-8 text-center text-red-600">
-                  Error loading PDF. Please try another file.
-                </div>
-              }
-            >
-              <Page
-                pageNumber={pageNumber}
-                scale={scale}
-                renderTextLayer={true}
-                renderAnnotationLayer={true}
+          <div className="bg-white shadow-lg w-full h-full flex items-center justify-center">
+            {isAndroid ? (
+              // Android-compatible viewer using iframe
+              <div className="w-full h-full">
+                <PDFViewerAndroid
+                  file={file}
+                  pageNumber={pageNumber}
+                  scale={scale}
+                  onLoadSuccess={onDocumentLoadSuccess}
+                  loading={
+                    <div className="p-8 text-center text-gray-600">
+                      Loading PDF...
+                    </div>
+                  }
+                  error={
+                    <div className="p-8 text-center text-red-600">
+                      Error loading PDF. Please try another file.
+                    </div>
+                  }
+                />
+              </div>
+            ) : (
+              // Standard react-pdf viewer for non-Android devices
+              <Document
+                file={file}
+                onLoadSuccess={onDocumentLoadSuccess}
                 loading={
-                  <div className="p-8 text-center text-gray-500">
-                    Loading page...
+                  <div className="p-8 text-center text-gray-600">
+                    Loading PDF...
                   </div>
                 }
-                // Optimize for TV performance
-                devicePixelRatio={window.devicePixelRatio || 1}
-              />
-            </Document>
+                error={
+                  <div className="p-8 text-center text-red-600">
+                    Error loading PDF. Please try another file.
+                  </div>
+                }
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  scale={scale}
+                  renderTextLayer={true}
+                  renderAnnotationLayer={true}
+                  loading={
+                    <div className="p-8 text-center text-gray-500">
+                      Loading page...
+                    </div>
+                  }
+                  // Optimize for landscape and TV performance
+                  devicePixelRatio={window.devicePixelRatio || 1}
+                  width={window.innerWidth * 0.9} // Use 90% of screen width for landscape
+                />
+              </Document>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">

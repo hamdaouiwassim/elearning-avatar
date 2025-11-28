@@ -72,13 +72,17 @@ export const Home = ({ onStartLearning }) => {
     <div className="min-h-screen bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200 py-8 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-black text-gray-800 mb-4">
-            Titan Academy
-          </h1>
-          <p className="text-xl text-gray-600">
-            Choisissez un document et commencez à apprendre avec votre assistant virtuel
-          </p>
+        <div className="text-center md:text-left mb-12">
+          <div className="flex flex-col gap-6">
+            <div>
+              <h1 className="text-5xl font-black text-gray-800 mb-4">
+                Titan Academy
+              </h1>
+              <p className="text-xl text-gray-600">
+                Choisissez un document et commencez à apprendre avec votre assistant virtuel
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Documents Grid */}

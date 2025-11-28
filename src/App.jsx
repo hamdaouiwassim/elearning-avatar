@@ -11,10 +11,12 @@ import { checkCapabilities } from "./utils/capabilityChecker";
 const Experience = lazy(() => import("./components/Experience").then(module => ({ default: module.Experience })));
 const UI = lazy(() => import("./components/UI").then(module => ({ default: module.UI })));
 const PDFBackground = lazy(() => import("./components/PDFBackground").then(module => ({ default: module.PDFBackground })));
+const LabPage = lazy(() => import("./components/LabPage").then(module => ({ default: module.LabPage })));
 
 function App() {
-  const [showLearning, setShowLearning] = useState(false);
+  const [view, setView] = useState("home"); // home | learning | lab
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [labCourse, setLabCourse] = useState(null);
   const [pdfReaderOpen, setPdfReaderOpen] = useState(true);
   const [pdfPageNumber, setPdfPageNumber] = useState(1);
   const [pdfScale, setPdfScale] = useState(1.0);
@@ -30,18 +32,16 @@ function App() {
     setCapabilityCheckDone(true);
   }, []);
   
-  // Delay Canvas rendering slightly to prioritize PDF loading on TV
+  // Delay Canvas rendering slightly (only for the learning view) to prioritize PDF loading on TV
   useEffect(() => {
-    if (showLearning) {
-      // Small delay to let PDF start loading first
+    if (view === "learning") {
       const timer = setTimeout(() => {
         setIsCanvasReady(true);
       }, 100);
       return () => clearTimeout(timer);
-    } else {
-      setIsCanvasReady(false);
     }
-  }, [showLearning]);
+    setIsCanvasReady(false);
+  }, [view]);
   
   // Retry capability check
   const handleRetryCapabilityCheck = () => {
@@ -55,20 +55,35 @@ function App() {
 
   const handleStartLearning = (course) => {
     setSelectedCourse(course);
-    setShowLearning(true);
+    setLabCourse(null);
+    setView("learning");
+  };
+
+  const handleOpenLab = (course) => {
+    if (!course || !course.hasStatements) {
+      return;
+    }
+    setLabCourse(course);
+    setSelectedCourse(course);
+    setView("lab");
   };
 
   const handleBackToHome = () => {
-    setShowLearning(false);
+    setView("home");
     setSelectedCourse(null);
+    setLabCourse(null);
   };
+
+  const isHome = view === "home";
+  const isLearning = view === "learning";
+  const isLab = view === "lab";
 
   // Show capability error if requirements not met
   if (capabilityCheckDone && capabilities && !capabilities.supported) {
     return <CapabilityError onRetry={handleRetryCapabilityCheck} />;
   }
 
-  if (!showLearning) {
+  if (isHome) {
     return (
       <>
         {!capabilityCheckDone && (
@@ -79,7 +94,11 @@ function App() {
             </div>
           </div>
         )}
-        {capabilityCheckDone && <Home onStartLearning={handleStartLearning} />}
+        {capabilityCheckDone && (
+          <Home
+            onStartLearning={handleStartLearning}
+          />
+        )}
       </>
     );
   }
@@ -90,7 +109,7 @@ function App() {
       <Leva hidden />
       
       {/* PDF Background - Lazy loaded with Suspense */}
-      {selectedCourse && (
+      {isLearning && selectedCourse && (
         <ErrorBoundary componentName="PDF Reader">
           <Suspense fallback={
             <div className="fixed inset-0 z-0 bg-gray-100 flex items-center justify-center">
@@ -114,7 +133,7 @@ function App() {
       )}
       
       {/* Avatar Canvas - Overlay - Lazy loaded with Suspense */}
-      {isCanvasReady && (
+      {isCanvasReady && isLearning && (
         <ErrorBoundary componentName="3D Avatar">
           <Canvas
             shadows
@@ -143,7 +162,7 @@ function App() {
         </ErrorBoundary>
       )}
       
-      {/* UI Controls - Overlay - Lazy loaded with Suspense */}
+      {/* Overlay content */}
       <Suspense fallback={
         <div className="fixed inset-0 z-20 flex items-center justify-center pointer-events-none">
           <div className="text-center">
@@ -152,17 +171,22 @@ function App() {
           </div>
         </div>
       }>
-        <UI
-          pdfReaderOpen={pdfReaderOpen}
-          setPdfReaderOpen={setPdfReaderOpen}
-          selectedCourse={selectedCourse}
-          onBackToHome={handleBackToHome}
-          pdfPageNumber={pdfPageNumber}
-          setPdfPageNumber={setPdfPageNumber}
-          pdfScale={pdfScale}
-          setPdfScale={setPdfScale}
-          pdfNumPages={pdfNumPages}
-        />
+        {isLearning && selectedCourse ? (
+          <UI
+            pdfReaderOpen={pdfReaderOpen}
+            setPdfReaderOpen={setPdfReaderOpen}
+            selectedCourse={selectedCourse}
+            onBackToHome={handleBackToHome}
+            pdfPageNumber={pdfPageNumber}
+            setPdfPageNumber={setPdfPageNumber}
+            pdfScale={pdfScale}
+            setPdfScale={setPdfScale}
+            pdfNumPages={pdfNumPages}
+            onOpenLab={handleOpenLab}
+          />
+        ) : (
+          <LabPage onBackToHome={handleBackToHome} course={labCourse} />
+        )}
       </Suspense>
     </>
   );

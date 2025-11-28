@@ -111,29 +111,28 @@ export const Experience = () => {
   }, []);
 
   useEffect(() => {
-    // Calculate camera position based on zoom and avatar position
-    // When avatar is on right, move camera to the LEFT (negative) so avatar appears on the RIGHT side of screen
-    const xOffset = avatarPosition === "right" ? -4.5 : 0; // Negative offset moves camera left, showing avatar on right
+    const xOffset = avatarPosition === "right" ? -4.5 : avatarPosition === "left" ? 4.5 : 0;
     const baseX = 0;
     const baseY = cameraZoomed ? 1.5 : 2.2;
     const baseZ = cameraZoomed ? 1.5 : 5;
-    const targetX = avatarPosition === "right" ? -2.5 : baseX; // Adjust target to keep avatar in view on right
+    const targetX =
+      avatarPosition === "right" ? -2.5 : avatarPosition === "left" ? 2.5 : baseX;
     const targetY = cameraZoomed ? 1.5 : 1.0;
     const targetZ = 0;
 
     cameraControls.current.setLookAt(
-      baseX + xOffset, 
-      baseY, 
-      baseZ, 
-      targetX, 
-      targetY, 
-      targetZ, 
+      baseX + xOffset,
+      baseY,
+      baseZ,
+      targetX,
+      targetY,
+      targetZ,
       true
     );
   }, [cameraZoomed, avatarPosition]);
-  
-  // Keep avatar centered so they always face viewers straight-on
-  const avatarXPosition = 0;
+
+  const avatarXPosition =
+    avatarPosition === "right" ? -2.5 : avatarPosition === "left" ? 2.5 : 0;
 
   return (
     <>

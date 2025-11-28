@@ -83,3 +83,64 @@ input[type="range"].slider::-moz-range-track {
   border-radius: 3px;
   background: transparent;
 }
+
+/* Landscape Mode Optimizations */
+.landscape-mode {
+  /* Ensure full viewport usage in landscape */
+  width: 100vw;
+  height: 100vh;
+}
+
+.landscape-viewer {
+  /* Optimize PDF viewer container for landscape */
+  min-height: calc(100vh - 120px); /* Account for header and controls */
+}
+
+.landscape-pdf-container {
+  /* Optimize PDF container for landscape viewing */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 120px);
+}
+
+/* Landscape-specific responsive adjustments */
+@media (orientation: landscape) {
+  .landscape-mode {
+    /* Ensure proper sizing in landscape orientation */
+    overflow: hidden;
+  }
+  
+  .landscape-viewer {
+    /* Maximize PDF viewing area in landscape */
+    padding: 0.5rem;
+  }
+  
+  /* Optimize PDF rendering for landscape screens */
+  .react-pdf__Page {
+    max-width: 95vw;
+    max-height: 90vh;
+  }
+  
+  .react-pdf__Page__canvas {
+    max-width: 100%;
+    max-height: 90vh;
+    height: auto !important;
+  }
+}
+
+/* Large screen landscape optimizations (TV/Android Box) */
+@media (orientation: landscape) and (min-width: 1024px) {
+  .landscape-viewer {
+    padding: 1rem;
+  }
+  
+  .react-pdf__Page {
+    max-width: 98vw;
+    max-height: 95vh;
+  }
+  
+  .react-pdf__Page__canvas {
+    max-height: 95vh;
+  }
+}

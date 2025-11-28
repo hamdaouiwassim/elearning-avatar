@@ -15,12 +15,12 @@ export const UI = ({
   setPdfReaderOpen,
   selectedCourse,
   onBackToHome,
+  onOpenLab,
   pdfPageNumber,
   setPdfPageNumber,
   pdfScale,
   setPdfScale,
   pdfNumPages,
-  ...props
 }) => {
   const { chat, loading, cameraZoomed, setCameraZoomed, message, avatarPosition, setAvatarPosition, setAudioElement, setAudioId, audioElement, avatarScreenPosition } = useChat();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -61,6 +61,51 @@ export const UI = ({
   const audioRef = useRef(null);
   const [isDocumentAudio, setIsDocumentAudio] = useState(false); // Track if playing document audio
   const positionSaveIntervalRef = useRef(null);
+
+  // Get saved position for document
+  const getSavedPosition = useCallback((docId) => {
+    if (!docId) return 0;
+    const saved = localStorage.getItem(`audio_position_${docId}`);
+    return saved ? parseFloat(saved) : 0;
+  }, []);
+
+  // Save position for document
+  const savePosition = useCallback((docId, position) => {
+    if (!docId || !isDocumentAudio) return;
+    localStorage.setItem(`audio_position_${docId}`, position.toString());
+  }, [isDocumentAudio]);
+
+  const handleAvatarAudioPlayback = useCallback(
+    async ({ audioUrl, audioId }) => {
+      if (!audioUrl || !audioRef.current) {
+        return false;
+      }
+
+      try {
+        if (selectedCourse?.id && isDocumentAudio && audioRef.current) {
+          savePosition(selectedCourse.id, audioRef.current.currentTime);
+          if (positionSaveIntervalRef.current) {
+            clearInterval(positionSaveIntervalRef.current);
+            positionSaveIntervalRef.current = null;
+          }
+        }
+
+        audioRef.current.src = audioUrl;
+        audioRef.current.load();
+        setIsDocumentAudio(false);
+        setAudioElement(audioRef.current);
+        setAudioId(audioId || null);
+        await audioRef.current.play();
+        setIsPlaying(true);
+        setIsPaused(false);
+        return true;
+      } catch (err) {
+        console.error("Error playing avatar audio:", err);
+        return false;
+      }
+    },
+    [selectedCourse?.id, isDocumentAudio, setAudioElement, setAudioId, savePosition]
+  );
   
   // Answer display state
   const [answerText, setAnswerText] = useState(null);
@@ -93,19 +138,6 @@ export const UI = ({
   // Page timing synchronization state
   const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number}
   const [hasPlayedOnce, setHasPlayedOnce] = useState(false); // Track if audio has been played for current document
-
-  // Get saved position for document
-  const getSavedPosition = (docId) => {
-    if (!docId) return 0;
-    const saved = localStorage.getItem(`audio_position_${docId}`);
-    return saved ? parseFloat(saved) : 0;
-  };
-
-  // Save position for document
-  const savePosition = (docId, position) => {
-    if (!docId || !isDocumentAudio) return;
-    localStorage.setItem(`audio_position_${docId}`, position.toString());
-  };
 
   // Fetch page timing metadata for synchronization
   const fetchPageTimings = useCallback(async (docId) => {
@@ -1250,28 +1282,52 @@ clearInterval(positionSaveIntervalRef.current);
                 </div>
               )}
             </div>
-            {onBackToHome && (
-              <button
-                onClick={onBackToHome}
-                className="pointer-events-auto bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md transition-colors flex items-center gap-2"
-                title="Retour à l'accueil"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+            <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
+              {selectedCourse?.hasStatements && onOpenLab && (
+                <button
+                  onClick={() => onOpenLab(selectedCourse)}
+                  className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-md transition-colors flex items-center gap-2"
+                  title="Passer aux exercices avec le lab"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                  />
-                </svg>
-                <span>Accueil</span>
-              </button>
-            )}
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
+                  </svg>
+                  <span>Ouvrir le Lab</span>
+                </button>
+              )}
+              {onBackToHome && (
+                <button
+                  onClick={onBackToHome}
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md transition-colors flex items-center gap-2"
+                  title="Retour à l'accueil"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    />
+                  </svg>
+                  <span>Accueil</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
         {/* Main Avatar Control Buttons - Bottom Center */}
