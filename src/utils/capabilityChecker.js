@@ -3,9 +3,43 @@
  * Returns an object with capability status and error messages
  */
 
+/**
+ * Check if browser is too old (missing essential APIs)
+ * Returns true if browser is too old
+ */
+export const isOldBrowser = () => {
+  return (
+    !window.Promise ||
+    !window.URL ||
+    !window.TextEncoder ||
+    !window.fetch
+  );
+};
+
 export const checkCapabilities = () => {
   const errors = [];
   const warnings = [];
+  
+  // First check if browser is too old
+  if (isOldBrowser()) {
+    errors.push({
+      component: 'Browser',
+      title: 'Browser Not Supported',
+      message: 'Your device browser is too old. Please update WebView.',
+      requirement: 'Modern browser with Promise, URL, TextEncoder, and Fetch API support required',
+      isOldBrowser: true
+    });
+    // Return early if browser is too old - other checks won't matter
+    return {
+      supported: false,
+      errors,
+      warnings,
+      isOldBrowser: true,
+      webglSupported: false,
+      pdfSupported: false,
+      canvasSupported: false
+    };
+  }
   
   // Check WebGL support (required for 3D Avatar)
   const webglSupported = checkWebGL();

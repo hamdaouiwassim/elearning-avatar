@@ -4,8 +4,9 @@ import { Canvas } from "@react-three/fiber";
 import { Leva } from "leva";
 import { Home } from "./components/Home";
 import { CapabilityError } from "./components/CapabilityError";
+import { OldBrowserError } from "./components/OldBrowserError";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { checkCapabilities } from "./utils/capabilityChecker";
+import { checkCapabilities, isOldBrowser } from "./utils/capabilityChecker";
 
 // Lazy load heavy components for better TV performance
 const Experience = lazy(() => import("./components/Experience").then(module => ({ default: module.Experience })));
@@ -78,8 +79,18 @@ function App() {
   const isLearning = view === "learning";
   const isLab = view === "lab";
 
+  // Check for old browser first (before capability check)
+  if (isOldBrowser()) {
+    return <OldBrowserError />;
+  }
+
   // Show capability error if requirements not met
   if (capabilityCheckDone && capabilities && !capabilities.supported) {
+    // Check if it's an old browser error
+    const hasOldBrowserError = capabilities.errors?.some(err => err.isOldBrowser);
+    if (hasOldBrowserError) {
+      return <OldBrowserError />;
+    }
     return <CapabilityError onRetry={handleRetryCapabilityCheck} />;
   }
 
