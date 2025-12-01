@@ -11,20 +11,25 @@ export const SimplePDFViewer = ({
   const iframeRef = useRef(null);
   const [error, setError] = useState(false);
 
+  // Normalize props to ensure they're primitives, never objects
+  const normalizedFileUrl = typeof fileUrl === 'string' ? fileUrl : (fileUrl && typeof fileUrl === 'object' && fileUrl.url ? String(fileUrl.url) : null);
+  const normalizedPageNumber = typeof pageNumber === 'number' && !isNaN(pageNumber) && pageNumber > 0 ? pageNumber : 1;
+
   // Construct PDF URL with page anchor
   const getPdfUrl = () => {
-    if (!fileUrl || typeof fileUrl !== 'string') return null;
+    if (!normalizedFileUrl || typeof normalizedFileUrl !== 'string') return null;
     
     // Remove existing anchors and add page number
-    const baseUrl = fileUrl.split('#')[0];
-    return `${baseUrl}#page=${pageNumber}`;
+    const baseUrl = normalizedFileUrl.split('#')[0];
+    const safePageNum = Number(normalizedPageNumber) || 1;
+    return `${baseUrl}#page=${safePageNum}`;
   };
 
   useEffect(() => {
     if (iframeRef.current) {
       setError(false);
     }
-  }, [fileUrl, pageNumber]);
+  }, [normalizedFileUrl, normalizedPageNumber]);
 
   const handleError = () => {
     setError(true);
