@@ -3,12 +3,11 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { PDFViewerAndroid } from "./PDFViewerAndroid";
+import { SimplePDFViewer } from "./SimplePDFViewer";
+import { isAndroid, isAndroidBox } from "../utils/deviceDetector";
 
 // Set up the worker for pdfjs - using local worker file from public directory
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-
-// Detect Android device
-const isAndroid = /Android/i.test(navigator.userAgent);
 
 export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setScale, numPages, setNumPages: setNumPagesProp }) => {
   const [file, setFile] = useState(null);
@@ -108,13 +107,23 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
 
   if (!document || !file) return null;
 
+  // Use simple viewer for Android boxes, full viewer for TV and other devices
+  const useSimpleViewer = isAndroidBox();
+  const useAndroidViewer = isAndroid() && !isAndroidBox(); // Android but not a box (TV)
+
   return (
     <div className="fixed inset-0 z-0 bg-gray-100 overflow-auto landscape-mode">
       <div className="min-h-full flex items-center justify-center p-2 lg:p-4">
         {file ? (
           <div className="bg-white shadow-2xl w-full h-full flex items-center justify-center">
-            {isAndroid ? (
-              // Android-compatible viewer using iframe - Landscape optimized
+            {useSimpleViewer ? (
+              // Simple PDF viewer for Android boxes - ultra simple iframe
+              <SimplePDFViewer 
+                fileUrl={file}
+                pageNumber={normalizedPageNumber}
+              />
+            ) : useAndroidViewer ? (
+              // Android-compatible viewer using iframe - Landscape optimized (for TV)
               <div className="w-full h-full">
                 <PDFViewerAndroid
                   file={file}

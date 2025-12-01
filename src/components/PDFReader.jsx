@@ -3,12 +3,11 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { PDFViewerAndroid } from "./PDFViewerAndroid";
+import { SimplePDFViewer } from "./SimplePDFViewer";
+import { isAndroid, isAndroidBox } from "../utils/deviceDetector";
 
 // Set up the worker for pdfjs - using local worker file from public directory
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-
-// Detect Android device
-const isAndroid = /Android/i.test(navigator.userAgent);
 
 export const PDFReader = ({ isOpen, onClose, document }) => {
   const [numPages, setNumPages] = useState(null);
@@ -221,8 +220,14 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
       <div className="flex-1 overflow-auto bg-gray-100 p-2 lg:p-4 flex items-center justify-center landscape-viewer">
         {file ? (
           <div className="bg-white shadow-lg w-full h-full flex items-center justify-center">
-            {isAndroid ? (
-              // Android-compatible viewer using iframe
+            {isAndroidBox() ? (
+              // Simple PDF viewer for Android boxes - ultra simple iframe
+              <SimplePDFViewer 
+                fileUrl={file}
+                pageNumber={pageNumber}
+              />
+            ) : isAndroid() ? (
+              // Android-compatible viewer using iframe (for TV)
               <div className="w-full h-full">
                 <PDFViewerAndroid
                   file={file}
