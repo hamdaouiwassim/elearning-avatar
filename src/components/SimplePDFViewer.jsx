@@ -62,7 +62,21 @@ export const SimplePDFViewer = ({
   }
 
   return (
-    <div className="w-full h-full bg-gray-100">
+    <div 
+      className="w-full h-full bg-gray-100"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        margin: 0,
+        padding: 0,
+        zIndex: 1
+      }}
+    >
       <iframe
         ref={iframeRef}
         src={pdfUrl}
@@ -71,9 +85,14 @@ export const SimplePDFViewer = ({
         onError={handleError}
         allow="fullscreen"
         style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
           width: '100%',
           height: '100%',
-          minHeight: '100vh'
+          border: 'none',
+          margin: 0,
+          padding: 0
         }}
       />
     </div>

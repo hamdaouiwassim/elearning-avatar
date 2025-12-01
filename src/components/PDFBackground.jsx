@@ -140,24 +140,60 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
   const safePageNumber = Number(normalizedPageNumber) || 1;
   const safeScale = Number(normalizedScale) || 1.0;
 
+  // Fullscreen styles for Android boxes
+  const fullscreenStyles = useSimpleViewer ? {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100vw',
+    height: '100vh',
+    margin: 0,
+    padding: 0,
+    zIndex: 0,
+    overflow: 'hidden'
+  } : {};
+
   return (
     <SafeRender>
-      <div className="fixed inset-0 z-0 bg-gray-100 overflow-auto landscape-mode">
-        <div className="min-h-full flex items-center justify-center p-2 lg:p-4">
-          <div className="bg-white shadow-2xl w-full h-full flex items-center justify-center">
-            {useSimpleViewer ? (
-              // Simple PDF viewer for Android boxes - ultra simple iframe
-              <SimplePDFViewer 
-                fileUrl={safeFile}
-                pageNumber={safePageNumber}
-              />
-            ) : useAndroidViewer ? (
-              // Android-compatible viewer using iframe - Landscape optimized (for TV)
-              <div className="w-full h-full">
-                <PDFViewerAndroid
+      <div 
+        className={useSimpleViewer ? "fixed inset-0 bg-gray-100" : "fixed inset-0 z-0 bg-gray-100 overflow-auto landscape-mode"}
+        style={fullscreenStyles}
+      >
+        {useSimpleViewer ? (
+          // Simple PDF viewer for Android boxes - fullscreen iframe
+          <SimplePDFViewer 
+            fileUrl={safeFile}
+            pageNumber={safePageNumber}
+          />
+        ) : (
+          <div className="min-h-full flex items-center justify-center p-2 lg:p-4">
+            <div className="bg-white shadow-2xl w-full h-full flex items-center justify-center">
+              {useAndroidViewer ? (
+                // Android-compatible viewer using iframe - Landscape optimized (for TV)
+                <div className="w-full h-full">
+                  <PDFViewerAndroid
+                    file={safeFile}
+                    pageNumber={safePageNumber}
+                    scale={safeScale}
+                    onLoadSuccess={onDocumentLoadSuccess}
+                    loading={
+                      <div className="p-8 text-center text-gray-600">
+                        Loading PDF...
+                      </div>
+                    }
+                    error={
+                      <div className="p-8 text-center text-red-600">
+                        Error loading PDF. Please try another file.
+                      </div>
+                    }
+                  />
+                </div>
+              ) : (
+                // Standard react-pdf viewer for non-Android devices - Landscape optimized
+                <Document
                   file={safeFile}
-                  pageNumber={safePageNumber}
-                  scale={safeScale}
                   onLoadSuccess={onDocumentLoadSuccess}
                   loading={
                     <div className="p-8 text-center text-gray-600">
@@ -169,42 +205,26 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
                       Error loading PDF. Please try another file.
                     </div>
                   }
-                />
-              </div>
-            ) : (
-              // Standard react-pdf viewer for non-Android devices - Landscape optimized
-              <Document
-                file={safeFile}
-                onLoadSuccess={onDocumentLoadSuccess}
-                loading={
-                  <div className="p-8 text-center text-gray-600">
-                    Loading PDF...
-                  </div>
-                }
-                error={
-                  <div className="p-8 text-center text-red-600">
-                    Error loading PDF. Please try another file.
-                  </div>
-                }
-              >
-                <Page
-                  pageNumber={safePageNumber}
-                  scale={safeScale}
-                  renderTextLayer={true}
-                  renderAnnotationLayer={true}
-                  loading={
-                    <div className="p-8 text-center text-gray-500">
-                      Loading page...
-                    </div>
-                  }
-                  // Optimize for landscape and TV performance
-                  devicePixelRatio={typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' ? window.devicePixelRatio : 1}
-                  width={typeof window !== 'undefined' && typeof window.innerWidth === 'number' ? window.innerWidth * 0.95 : 800} // Use 95% of screen width for landscape
-                />
-              </Document>
-            )}
+                >
+                  <Page
+                    pageNumber={safePageNumber}
+                    scale={safeScale}
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
+                    loading={
+                      <div className="p-8 text-center text-gray-500">
+                        Loading page...
+                      </div>
+                    }
+                    // Optimize for landscape and TV performance
+                    devicePixelRatio={typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' ? window.devicePixelRatio : 1}
+                    width={typeof window !== 'undefined' && typeof window.innerWidth === 'number' ? window.innerWidth * 0.95 : 800} // Use 95% of screen width for landscape
+                  />
+                </Document>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </SafeRender>
   );
