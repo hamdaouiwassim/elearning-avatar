@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import React from "react";
 
 /**
  * Android-compatible PDF Viewer Component
@@ -19,8 +20,19 @@ export const PDFViewerAndroid = ({
   const objectRef = useRef(null);
   const [useObject, setUseObject] = useState(false);
 
+  // Validate and normalize props to prevent object rendering errors
+  const normalizedPageNumber = typeof pageNumber === 'number' && !isNaN(pageNumber) ? pageNumber : (typeof pageNumber === 'string' ? parseInt(pageNumber, 10) || 1 : 1);
+  const normalizedScale = typeof scale === 'number' && !isNaN(scale) && scale > 0 ? scale : (typeof scale === 'string' ? parseFloat(scale) || 1.0 : 1.0);
+  
+  // Ensure file is a string, not an object
+  const normalizedFile = typeof file === 'string' ? file : (file && typeof file === 'object' && file.url ? String(file.url) : (file && typeof file === 'object' && file.src ? String(file.src) : null));
+  
+  // Validate LoadingComponent and ErrorComponent are valid React elements
+  const isValidLoadingComponent = LoadingComponent && (React.isValidElement(LoadingComponent) || typeof LoadingComponent === 'function');
+  const isValidErrorComponent = ErrorComponent && (React.isValidElement(ErrorComponent) || typeof ErrorComponent === 'function');
+
   useEffect(() => {
-    if (!file) return;
+    if (!normalizedFile) return;
     
     setIsLoading(true);
     setHasError(false);
@@ -34,7 +46,7 @@ export const PDFViewerAndroid = ({
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [file]);
+  }, [normalizedFile, isLoading]);
 
   // Handle iframe load
   const handleIframeLoad = () => {
@@ -71,18 +83,14 @@ export const PDFViewerAndroid = ({
 
   // Construct PDF URL with page anchor
   const getPdfUrl = () => {
-    if (!file) return null;
+    if (!normalizedFile) return null;
     
-    if (typeof file === 'string') {
-      // Use #page anchor for page navigation (supported by most PDF viewers)
-      const baseUrl = file.split('#')[0]; // Remove existing anchors
-      return `${baseUrl}#page=${pageNumber}`;
-    }
-    
-    return file;
+    // Use #page anchor for page navigation (supported by most PDF viewers)
+    const baseUrl = normalizedFile.split('#')[0]; // Remove existing anchors
+    return `${baseUrl}#page=${normalizedPageNumber}`;
   };
 
-  if (!file) {
+  if (!normalizedFile) {
     return null;
   }
 
@@ -90,8 +98,8 @@ export const PDFViewerAndroid = ({
   if (hasError && useObject) {
     return (
       <div className="w-full h-full flex items-center justify-center">
-        {ErrorComponent ? (
-          <ErrorComponent />
+        {isValidErrorComponent ? (
+          React.isValidElement(ErrorComponent) ? ErrorComponent : <ErrorComponent />
         ) : (
           <div className="p-8 text-center text-red-600">
             <p className="mb-4">Unable to load PDF. Your browser may not support PDF viewing.</p>
@@ -113,9 +121,9 @@ export const PDFViewerAndroid = ({
   if (useObject) {
     return (
       <div className="relative w-full h-full landscape-pdf-container">
-        {isLoading && LoadingComponent && (
+        {isLoading && isValidLoadingComponent && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-            <LoadingComponent />
+            {React.isValidElement(LoadingComponent) ? LoadingComponent : <LoadingComponent />}
           </div>
         )}
         <object
@@ -124,10 +132,10 @@ export const PDFViewerAndroid = ({
           type="application/pdf"
           className="w-full h-full"
           style={{
-            transform: `scale(${scale})`,
+            transform: `scale(${normalizedScale})`,
             transformOrigin: 'center center',
-            width: `${100 / scale}%`,
-            height: `${100 / scale}%`,
+            width: `${100 / normalizedScale}%`,
+            height: `${100 / normalizedScale}%`,
             maxWidth: '100vw',
             maxHeight: '100vh',
           }}

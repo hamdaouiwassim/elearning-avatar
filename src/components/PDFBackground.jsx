@@ -13,11 +13,21 @@ const isAndroid = /Android/i.test(navigator.userAgent);
 export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setScale, numPages, setNumPages: setNumPagesProp }) => {
   const [file, setFile] = useState(null);
 
-  const onDocumentLoadSuccess = ({ numPages: docNumPages }) => {
+  // Validate and normalize props to prevent object rendering errors
+  const normalizedPageNumber = typeof pageNumber === 'number' && !isNaN(pageNumber) ? pageNumber : 1;
+  const normalizedScale = typeof scale === 'number' && !isNaN(scale) ? scale : 1.0;
+
+  const onDocumentLoadSuccess = (result) => {
+    // Safely extract numPages from result object
+    let docNumPages = null;
+    if (result && typeof result === 'object') {
+      docNumPages = result.numPages;
+    }
+    
     // Only update if we don't already have a page count from metadata
     // or if the loaded count is more reliable (not a placeholder)
-    if (setNumPagesProp) {
-      if (!numPages || (docNumPages && docNumPages < 1000)) {
+    if (setNumPagesProp && typeof docNumPages === 'number' && !isNaN(docNumPages)) {
+      if (!numPages || (docNumPages < 1000)) {
         setNumPagesProp(docNumPages);
       }
     }
@@ -27,27 +37,36 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
   };
 
   useEffect(() => {
-    if (document) {
+    if (document && typeof document === 'object' && !Array.isArray(document)) {
       // If document has id, construct the URL to fetch from API
-      if (document.id) {
+      const documentId = document.id;
+      if (documentId && (typeof documentId === 'string' || typeof documentId === 'number')) {
         const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
-        setFile(`${API_URL}/api/documents/${document.id}/file`);
+        setFile(`${API_URL}/api/documents/${String(documentId)}/file`);
         
         // Try to get page count from document metadata if available
         if (isAndroid && setNumPagesProp) {
-          if (document.numPagesVisual) {
-            setNumPagesProp(document.numPagesVisual);
-          } else if (document.numPages) {
-            setNumPagesProp(document.numPages);
+          const numPagesVisual = document.numPagesVisual;
+          const numPages = document.numPages;
+          if (typeof numPagesVisual === 'number' && !isNaN(numPagesVisual)) {
+            setNumPagesProp(numPagesVisual);
+          } else if (typeof numPages === 'number' && !isNaN(numPages)) {
+            setNumPagesProp(numPages);
           }
         }
-      } else if (document.pdfUrl) {
+      } else {
         // Fallback to pdfUrl if it exists
-        setFile(document.pdfUrl);
+        const pdfUrl = document.pdfUrl;
+        if (pdfUrl && typeof pdfUrl === 'string') {
+          setFile(pdfUrl);
+        }
       }
       if (setPageNumber) {
         setPageNumber(1);
       }
+    } else if (document === null || document === undefined) {
+      // Document is null/undefined, clear file
+      setFile(null);
     }
   }, [document, setPageNumber, setNumPagesProp]);
 
@@ -67,10 +86,16 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
 
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        setPageNumber((prev) => Math.max(1, prev - 1));
-      } else       if (event.key === "ArrowRight") {
+        setPageNumber((prev) => {
+          const currentPage = typeof prev === 'number' ? prev : normalizedPageNumber;
+          return Math.max(1, currentPage - 1);
+        });
+      } else if (event.key === "ArrowRight") {
         event.preventDefault();
-        setPageNumber((prev) => numPages ? Math.min(numPages, prev + 1) : prev + 1);
+        setPageNumber((prev) => {
+          const currentPage = typeof prev === 'number' ? prev : normalizedPageNumber;
+          return numPages ? Math.min(numPages, currentPage + 1) : currentPage + 1;
+        });
       }
     };
 
@@ -93,8 +118,8 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
               <div className="w-full h-full">
                 <PDFViewerAndroid
                   file={file}
-                  pageNumber={pageNumber || 1}
-                  scale={scale || 1.0}
+                  pageNumber={normalizedPageNumber}
+                  scale={normalizedScale}
                   onLoadSuccess={onDocumentLoadSuccess}
                   loading={
                     <div className="p-8 text-center text-gray-600">
@@ -125,8 +150,8 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
                 }
               >
                 <Page
-                  pageNumber={pageNumber || 1}
-                  scale={scale || 1.0}
+                  pageNumber={normalizedPageNumber}
+                  scale={normalizedScale}
                   renderTextLayer={true}
                   renderAnnotationLayer={true}
                   loading={
