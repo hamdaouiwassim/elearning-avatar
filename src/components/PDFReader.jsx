@@ -273,8 +273,15 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
                     </div>
                   }
                   // Optimize for landscape and TV performance
-                  devicePixelRatio={window.devicePixelRatio || 1}
-                  width={window.innerWidth * 0.9} // Use 90% of screen width for landscape
+                  devicePixelRatio={typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' ? window.devicePixelRatio : 1}
+                  width={(() => {
+                    if (typeof window !== 'undefined' && typeof window.innerWidth === 'number' && window.innerWidth > 0) {
+                      const calculatedWidth = window.innerWidth * 0.9;
+                      // Ensure minimum width of 200px for very small screens
+                      return Math.max(200, calculatedWidth);
+                    }
+                    return 800;
+                  })()}
                 />
               </Document>
             )}

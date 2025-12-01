@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { getDeviceType } from "../utils/deviceDetector";
 
 /**
  * Simple PDF Viewer for Android Boxes/TV
@@ -74,9 +75,29 @@ export const SimplePDFViewer = ({
         height: '100vh',
         margin: 0,
         padding: 0,
-        zIndex: 1
+        zIndex: 1,
+        overflow: 'hidden',
+        // Ensure fullscreen on Android boxes
+        minWidth: '100vw',
+        minHeight: '100vh',
+        maxWidth: '100vw',
+        maxHeight: '100vh'
       }}
     >
+      {/* Device Type Label */}
+      <div 
+        className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
+        style={{ pointerEvents: 'none' }}
+      >
+        Device: {(() => {
+          try {
+            const deviceType = getDeviceType();
+            return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
+          } catch (error) {
+            return 'UNKNOWN';
+          }
+        })()}
+      </div>
       <iframe
         ref={iframeRef}
         src={pdfUrl}

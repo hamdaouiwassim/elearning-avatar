@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import React from "react";
+import { getDeviceType } from "../utils/deviceDetector";
 
 /**
  * Android-compatible PDF Viewer Component
@@ -121,6 +122,20 @@ export const PDFViewerAndroid = ({
   if (useObject) {
     return (
       <div className="relative w-full h-full landscape-pdf-container">
+        {/* Device Type Label */}
+        <div 
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-green-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
+          style={{ pointerEvents: 'none' }}
+        >
+          Device: {(() => {
+            try {
+              const deviceType = getDeviceType();
+              return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
+            } catch (error) {
+              return 'UNKNOWN';
+            }
+          })()}
+        </div>
         {isLoading && isValidLoadingComponent && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
             {React.isValidElement(LoadingComponent) ? LoadingComponent : <LoadingComponent />}
@@ -161,9 +176,23 @@ export const PDFViewerAndroid = ({
   // Primary: Use iframe (works on most Android browsers) - Landscape optimized
   return (
     <div className="relative w-full h-full landscape-pdf-container">
-      {isLoading && LoadingComponent && (
+      {/* Device Type Label */}
+      <div 
+        className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-purple-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
+        style={{ pointerEvents: 'none' }}
+      >
+        Device: {(() => {
+          try {
+            const deviceType = getDeviceType();
+            return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
+          } catch (error) {
+            return 'UNKNOWN';
+          }
+        })()}
+      </div>
+      {isLoading && isValidLoadingComponent && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-          <LoadingComponent />
+          {React.isValidElement(LoadingComponent) ? LoadingComponent : (typeof LoadingComponent === 'function' ? <LoadingComponent /> : null)}
         </div>
       )}
       <iframe
@@ -171,10 +200,10 @@ export const PDFViewerAndroid = ({
         src={getPdfUrl()}
         className="w-full h-full border-0"
         style={{
-          transform: `scale(${scale})`,
+          transform: `scale(${normalizedScale})`,
           transformOrigin: 'center center',
-          width: `${100 / scale}%`,
-          height: `${100 / scale}%`,
+          width: `${100 / normalizedScale}%`,
+          height: `${100 / normalizedScale}%`,
           maxWidth: '100vw',
           maxHeight: '100vh',
         }}

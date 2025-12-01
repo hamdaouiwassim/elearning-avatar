@@ -4,7 +4,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { PDFViewerAndroid } from "./PDFViewerAndroid";
 import { SimplePDFViewer } from "./SimplePDFViewer";
-import { isAndroid, isAndroidBox } from "../utils/deviceDetector";
+import { isAndroid, isAndroidBox, getDeviceType } from "../utils/deviceDetector";
 import { SafeRender } from "../utils/safeComponent";
 
 // Set up the worker for pdfjs - using local worker file from public directory
@@ -92,6 +92,32 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
     }
   }, [document, setPageNumber, setNumPagesProp, isAndroid]);
 
+  // Ensure fullscreen on Android boxes - set body/html styles
+  useEffect(() => {
+    const useSimpleViewer = isAndroidBox();
+    if (useSimpleViewer && normalizedFile) {
+      // Store original styles
+      const originalBodyOverflow = document.body.style.overflow;
+      const originalHtmlOverflow = document.documentElement.style.overflow;
+      const originalBodyMargin = document.body.style.margin;
+      const originalHtmlMargin = document.documentElement.style.margin;
+      
+      // Set fullscreen styles
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.margin = '0';
+      document.documentElement.style.margin = '0';
+      
+      return () => {
+        // Restore original styles
+        document.body.style.overflow = originalBodyOverflow;
+        document.documentElement.style.overflow = originalHtmlOverflow;
+        document.body.style.margin = originalBodyMargin;
+        document.documentElement.style.margin = originalHtmlMargin;
+      };
+    }
+  }, [normalizedFile]);
+
   // Keyboard navigation
   useEffect(() => {
     if (!file || !numPages || !setPageNumber) return;
@@ -140,7 +166,7 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
   const safePageNumber = Number(normalizedPageNumber) || 1;
   const safeScale = Number(normalizedScale) || 1.0;
 
-  // Fullscreen styles for Android boxes
+  // Fullscreen styles for Android boxes - ensure it's above other content
   const fullscreenStyles = useSimpleViewer ? {
     position: 'fixed',
     top: 0,
@@ -151,7 +177,7 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
     height: '100vh',
     margin: 0,
     padding: 0,
-    zIndex: 0,
+    zIndex: 15, // Higher than Canvas (zIndex: 10) to ensure PDF is visible
     overflow: 'hidden'
   } : {};
 
@@ -192,35 +218,58 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
                 </div>
               ) : (
                 // Standard react-pdf viewer for non-Android devices - Landscape optimized
-                <Document
-                  file={safeFile}
-                  onLoadSuccess={onDocumentLoadSuccess}
-                  loading={
-                    <div className="p-8 text-center text-gray-600">
-                      Loading PDF...
-                    </div>
-                  }
-                  error={
-                    <div className="p-8 text-center text-red-600">
-                      Error loading PDF. Please try another file.
-                    </div>
-                  }
-                >
-                  <Page
-                    pageNumber={safePageNumber}
-                    scale={safeScale}
-                    renderTextLayer={true}
-                    renderAnnotationLayer={true}
+                <div className="relative w-full h-full">
+                  {/* Device Type Label */}
+                  <div 
+                    className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-orange-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    Device: {(() => {
+                      try {
+                        const deviceType = getDeviceType();
+                        return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
+                      } catch (error) {
+                        return 'UNKNOWN';
+                      }
+                    })()}
+                  </div>
+                  <Document
+                    file={safeFile}
+                    onLoadSuccess={onDocumentLoadSuccess}
                     loading={
-                      <div className="p-8 text-center text-gray-500">
-                        Loading page...
+                      <div className="p-8 text-center text-gray-600">
+                        Loading PDF...
                       </div>
                     }
-                    // Optimize for landscape and TV performance
-                    devicePixelRatio={typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' ? window.devicePixelRatio : 1}
-                    width={typeof window !== 'undefined' && typeof window.innerWidth === 'number' ? window.innerWidth * 0.95 : 800} // Use 95% of screen width for landscape
-                  />
-                </Document>
+                    error={
+                      <div className="p-8 text-center text-red-600">
+                        Error loading PDF. Please try another file.
+                      </div>
+                    }
+                  >
+                    <Page
+                      pageNumber={safePageNumber}
+                      scale={safeScale}
+                      renderTextLayer={true}
+                      renderAnnotationLayer={true}
+                      loading={
+                        <div className="p-8 text-center text-gray-500">
+                          Loading page...
+                        </div>
+                      }
+                      // Optimize for landscape and TV performance
+                      devicePixelRatio={typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' ? window.devicePixelRatio : 1}
+                      width={(() => {
+                        if (typeof window !== 'undefined' && typeof window.innerWidth === 'number' && window.innerWidth > 0) {
+                          const calculatedWidth = window.innerWidth * 0.95;
+                          // Ensure minimum width of 200px for very small screens
+                          return Math.max(200, calculatedWidth);
+                        }
+                        return 800;
+                      })()}
+                    />
+                  </Document>
+                </div>
               )}
             </div>
           </div>
