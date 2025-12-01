@@ -66,6 +66,16 @@ export default defineConfig({
       }
     },
     // Increase chunk size warning limit for polyfills
-    chunkSizeWarningLimit: 1000
+    chunkSizeWarningLimit: 1000,
+    // Use esbuild for minification (faster, and preserves error messages better)
+    minify: 'esbuild',
+    // Don't drop console in production for Android debugging
+    esbuild: {
+      drop: [], // Keep console.log for debugging on Android
+    },
+  },
+  // Define environment variables for better error handling
+  define: {
+    __DEV__: JSON.stringify(process.env.NODE_ENV === 'development'),
   }
 })
