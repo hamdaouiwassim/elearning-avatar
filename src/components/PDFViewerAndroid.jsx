@@ -133,7 +133,7 @@ export const PDFViewerAndroid = ({
     }
   };
 
-  // Construct PDF URL with page anchor
+  // Construct PDF URL with page anchor and inline viewing parameters
   const getPdfUrl = () => {
     try {
       if (!normalizedFile) return null;
@@ -145,12 +145,17 @@ export const PDFViewerAndroid = ({
         return null;
       }
       
-      // Use #page anchor for page navigation (supported by most PDF viewers)
-      const baseUrl = fileString.split('#')[0]; // Remove existing anchors
+      // Remove existing anchors and query params
+      const urlParts = fileString.split('#');
+      const baseUrl = urlParts[0].split('?')[0];
       const pageNum = typeof normalizedPageNumber === 'number' && !isNaN(normalizedPageNumber) && normalizedPageNumber > 0 
         ? normalizedPageNumber 
         : 1;
-      return `${baseUrl}#page=${pageNum}`;
+      
+      // Add parameters to force inline viewing (prevent download prompt on Android)
+      // #toolbar=0 hides toolbar, #view=FitH fits horizontally, #zoom=page fits page
+      // These parameters tell the browser to display inline, not download
+      return `${baseUrl}#page=${pageNum}&toolbar=0&view=FitH&zoom=page`;
     } catch (error) {
       console.error('PDFViewerAndroid: Error constructing PDF URL', error);
       return normalizedFile ? String(normalizedFile) : null;
@@ -236,11 +241,10 @@ export const PDFViewerAndroid = ({
               })()}
             </div>
           )}
-          <object
+          <iframe
             ref={objectRef}
-            data={pdfUrl || undefined}
-            type="application/pdf"
-            className="w-full h-full"
+            src={pdfUrl || undefined}
+            className="w-full h-full border-0"
             style={{
               transform: `scale(${safeScale})`,
               transformOrigin: 'center center',
@@ -251,21 +255,10 @@ export const PDFViewerAndroid = ({
             }}
             onLoad={handleObjectLoad}
             onError={handleObjectError}
-          >
-            <div className="p-8 text-center text-gray-600">
-              <p className="mb-4">PDF viewer not supported.</p>
-              {pdfUrl && (
-                <a 
-                  href={pdfUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-500 underline hover:text-blue-700"
-                >
-                  Download PDF
-                </a>
-              )}
-            </div>
-          </object>
+            title="PDF Viewer"
+            allow="fullscreen"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+          />
         </div>
       );
     } catch (error) {
@@ -322,6 +315,7 @@ export const PDFViewerAndroid = ({
             })()}
           </div>
         )}
+        {/* Use iframe with inline viewing parameters to prevent download prompt */}
         <iframe
           ref={iframeRef}
           src={pdfUrl || undefined}
@@ -338,6 +332,7 @@ export const PDFViewerAndroid = ({
           onError={handleIframeError}
           title="PDF Viewer"
           allow="fullscreen"
+          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
         />
       </div>
     );
