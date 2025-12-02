@@ -4,6 +4,8 @@ import legacy from '@vitejs/plugin-legacy'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Explicitly set base path (use './' for relative paths, '/' for absolute)
+  base: '/',
   plugins: [
     react(),
     legacy({
@@ -62,7 +64,11 @@ export default defineConfig({
     // Ensure proper chunking for legacy builds
     rollupOptions: {
       output: {
-        manualChunks: undefined
+        manualChunks: undefined,
+        // Ensure consistent chunk file names
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       }
     },
     // Increase chunk size warning limit for polyfills
@@ -73,6 +79,10 @@ export default defineConfig({
     esbuild: {
       drop: [], // Keep console.log for debugging on Android
     },
+    // Ensure assets are properly referenced
+    assetsInlineLimit: 4096,
+    // Source maps for debugging (can be disabled in production if needed)
+    sourcemap: false,
   },
   // Define environment variables for better error handling
   define: {

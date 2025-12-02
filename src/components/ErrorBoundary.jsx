@@ -6,6 +6,13 @@ const decodeReactError = (error) => {
   
   const message = error.message.toString();
   
+  // Dynamic import errors
+  if (message.includes("Failed to fetch dynamically imported module") || message.includes("dynamically imported module")) {
+    const moduleMatch = message.match(/module:\s*(.+)/);
+    const moduleUrl = moduleMatch ? moduleMatch[1] : "unknown module";
+    return `Failed to load module: ${moduleUrl}. This might be due to:\n- Network connectivity issues\n- Missing build files (check that all assets are deployed)\n- CORS configuration problems\n- Incorrect base path configuration\n\nTry refreshing the page or checking the browser console for more details.`;
+  }
+  
   // React error #130: Objects are not valid as a React child
   if (message.includes("#130") || message.includes("Objects are not valid")) {
     return "Error: Objects are not valid as a React child. This usually means an object is being rendered directly in JSX instead of a property value. Check that you're rendering strings, numbers, or valid React elements, not objects.";

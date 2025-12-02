@@ -7,12 +7,13 @@ import { CapabilityError } from "./components/CapabilityError";
 import { OldBrowserError } from "./components/OldBrowserError";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { checkCapabilities, isOldBrowser } from "./utils/capabilityChecker";
+import { lazyWithRetry } from "./utils/lazyWithRetry";
 
-// Lazy load heavy components for better TV performance
-const Experience = lazy(() => import("./components/Experience").then(module => ({ default: module.Experience })));
-const UI = lazy(() => import("./components/UI").then(module => ({ default: module.UI })));
-const PDFBackground = lazy(() => import("./components/PDFBackground").then(module => ({ default: module.PDFBackground })));
-const LabPage = lazy(() => import("./components/LabPage").then(module => ({ default: module.LabPage })));
+// Lazy load heavy components for better TV performance with retry logic
+const Experience = lazyWithRetry(() => import("./components/Experience").then(module => ({ default: module.Experience })));
+const UI = lazyWithRetry(() => import("./components/UI").then(module => ({ default: module.UI })));
+const PDFBackground = lazyWithRetry(() => import("./components/PDFBackground").then(module => ({ default: module.PDFBackground })));
+const LabPage = lazyWithRetry(() => import("./components/LabPage").then(module => ({ default: module.LabPage })));
 
 function App() {
   const [view, setView] = useState("home"); // home | learning | lab
@@ -174,31 +175,33 @@ function App() {
       )}
       
       {/* Overlay content */}
-      <Suspense fallback={
-        <div className="fixed inset-0 z-20 flex items-center justify-center pointer-events-none">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-            <p className="text-white text-lg">Loading UI...</p>
+      <ErrorBoundary componentName="UI Component">
+        <Suspense fallback={
+          <div className="fixed inset-0 z-20 flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+              <p className="text-white text-lg">Loading UI...</p>
+            </div>
           </div>
-        </div>
-      }>
-        {isLearning && selectedCourse ? (
-          <UI
-            pdfReaderOpen={pdfReaderOpen}
-            setPdfReaderOpen={setPdfReaderOpen}
-            selectedCourse={selectedCourse}
-            onBackToHome={handleBackToHome}
-            pdfPageNumber={pdfPageNumber}
-            setPdfPageNumber={setPdfPageNumber}
-            pdfScale={pdfScale}
-            setPdfScale={setPdfScale}
-            pdfNumPages={pdfNumPages}
-            onOpenLab={handleOpenLab}
-          />
-        ) : (
-          <LabPage onBackToHome={handleBackToHome} course={labCourse} />
-        )}
-      </Suspense>
+        }>
+          {isLearning && selectedCourse ? (
+            <UI
+              pdfReaderOpen={pdfReaderOpen}
+              setPdfReaderOpen={setPdfReaderOpen}
+              selectedCourse={selectedCourse}
+              onBackToHome={handleBackToHome}
+              pdfPageNumber={pdfPageNumber}
+              setPdfPageNumber={setPdfPageNumber}
+              pdfScale={pdfScale}
+              setPdfScale={setPdfScale}
+              pdfNumPages={pdfNumPages}
+              onOpenLab={handleOpenLab}
+            />
+          ) : (
+            <LabPage onBackToHome={handleBackToHome} course={labCourse} />
+          )}
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
 }
