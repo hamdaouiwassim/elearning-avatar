@@ -33,62 +33,128 @@ export const PDFViewerAndroid = ({
   const isValidErrorComponent = ErrorComponent && (React.isValidElement(ErrorComponent) || typeof ErrorComponent === 'function');
 
   useEffect(() => {
-    if (!normalizedFile) return;
-    
-    setIsLoading(true);
-    setHasError(false);
-    
-    // Try iframe first, fallback to object after timeout
-    const timer = setTimeout(() => {
-      if (isLoading) {
-        // If still loading, try object tag as fallback
-        setUseObject(true);
-      }
-    }, 3000);
+    try {
+      if (!normalizedFile) return;
+      
+      setIsLoading(true);
+      setHasError(false);
+      
+      // Try iframe first, fallback to object after timeout
+      const timer = setTimeout(() => {
+        try {
+          if (isLoading) {
+            // If still loading, try object tag as fallback
+            console.warn('PDFViewerAndroid: Iframe taking too long, trying object tag fallback');
+            setUseObject(true);
+          }
+        } catch (error) {
+          console.error('PDFViewerAndroid: Error in timeout callback', error);
+        }
+      }, 3000);
 
-    return () => clearTimeout(timer);
+      return () => {
+        try {
+          clearTimeout(timer);
+        } catch (error) {
+          console.error('PDFViewerAndroid: Error clearing timeout', error);
+        }
+      };
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error in useEffect', error);
+      setIsLoading(false);
+      setHasError(true);
+    }
   }, [normalizedFile, isLoading]);
 
   // Handle iframe load
   const handleIframeLoad = () => {
-    setIsLoading(false);
-    setHasError(false);
-    
-    // Call onLoadSuccess if provided
-    // Note: We can't reliably get page count from iframe, so we'll use a placeholder
-    if (onLoadSuccess) {
-      onLoadSuccess({ numPages: 100 }); // Use a high number to allow navigation
+    try {
+      setIsLoading(false);
+      setHasError(false);
+      
+      // Call onLoadSuccess if provided
+      // Note: We can't reliably get page count from iframe, so we'll use a placeholder
+      if (onLoadSuccess) {
+        try {
+          onLoadSuccess({ numPages: 100 }); // Use a high number to allow navigation
+        } catch (error) {
+          console.error('PDFViewerAndroid: Error in onLoadSuccess callback', error);
+        }
+      }
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error in handleIframeLoad', error);
+      setIsLoading(false);
+      setHasError(true);
     }
   };
 
   // Handle iframe error - fallback to object
   const handleIframeError = () => {
-    setUseObject(true);
-    setIsLoading(false);
+    try {
+      console.error('PDFViewerAndroid: Iframe failed to load, falling back to object tag');
+      setUseObject(true);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error in handleIframeError', error);
+      setIsLoading(false);
+      setHasError(true);
+    }
   };
 
   // Handle object load
   const handleObjectLoad = () => {
-    setIsLoading(false);
-    setHasError(false);
-    if (onLoadSuccess) {
-      onLoadSuccess({ numPages: 100 });
+    try {
+      setIsLoading(false);
+      setHasError(false);
+      if (onLoadSuccess) {
+        try {
+          onLoadSuccess({ numPages: 100 });
+        } catch (error) {
+          console.error('PDFViewerAndroid: Error in onLoadSuccess callback (object)', error);
+        }
+      }
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error in handleObjectLoad', error);
+      setIsLoading(false);
+      setHasError(true);
     }
   };
 
   // Handle object error
   const handleObjectError = () => {
-    setIsLoading(false);
-    setHasError(true);
+    try {
+      console.error('PDFViewerAndroid: Object tag failed to load PDF');
+      setIsLoading(false);
+      setHasError(true);
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error in handleObjectError', error);
+      setIsLoading(false);
+      setHasError(true);
+    }
   };
 
   // Construct PDF URL with page anchor
   const getPdfUrl = () => {
-    if (!normalizedFile) return null;
-    
-    // Use #page anchor for page navigation (supported by most PDF viewers)
-    const baseUrl = normalizedFile.split('#')[0]; // Remove existing anchors
-    return `${baseUrl}#page=${normalizedPageNumber}`;
+    try {
+      if (!normalizedFile) return null;
+      
+      // Ensure normalizedFile is a string
+      const fileString = String(normalizedFile);
+      if (!fileString || fileString.length === 0) {
+        console.error('PDFViewerAndroid: Invalid file string in getPdfUrl');
+        return null;
+      }
+      
+      // Use #page anchor for page navigation (supported by most PDF viewers)
+      const baseUrl = fileString.split('#')[0]; // Remove existing anchors
+      const pageNum = typeof normalizedPageNumber === 'number' && !isNaN(normalizedPageNumber) && normalizedPageNumber > 0 
+        ? normalizedPageNumber 
+        : 1;
+      return `${baseUrl}#page=${pageNum}`;
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error constructing PDF URL', error);
+      return normalizedFile ? String(normalizedFile) : null;
+    }
   };
 
   if (!normalizedFile) {
@@ -97,34 +163,136 @@ export const PDFViewerAndroid = ({
 
   // Show error if both methods failed
   if (hasError && useObject) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        {isValidErrorComponent ? (
-          React.isValidElement(ErrorComponent) ? ErrorComponent : <ErrorComponent />
-        ) : (
-          <div className="p-8 text-center text-red-600">
-            <p className="mb-4">Unable to load PDF. Your browser may not support PDF viewing.</p>
-            <a 
-              href={getPdfUrl()} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-500 underline hover:text-blue-700"
-            >
-              Click here to download the PDF
-            </a>
+    try {
+      const pdfUrl = getPdfUrl();
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          {isValidErrorComponent ? (
+            React.isValidElement(ErrorComponent) ? ErrorComponent : <ErrorComponent />
+          ) : (
+            <div className="p-8 text-center text-red-600">
+              <p className="mb-4">Unable to load PDF. Your browser may not support PDF viewing.</p>
+              {pdfUrl && (
+                <a 
+                  href={pdfUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline hover:text-blue-700"
+                >
+                  Click here to download the PDF
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error rendering error component', error);
+      return (
+        <div className="w-full h-full flex items-center justify-center p-8 text-center text-red-600">
+          <div>
+            <p className="mb-4">Error loading PDF viewer.</p>
+            <p className="text-sm text-gray-500">Error: {error?.message || 'Unknown error'}</p>
           </div>
-        )}
-      </div>
-    );
+        </div>
+      );
+    }
   }
 
   // Use object tag as fallback (better compatibility on older Android) - Landscape optimized
   if (useObject) {
+    try {
+      const pdfUrl = getPdfUrl();
+      const safeScale = typeof normalizedScale === 'number' && !isNaN(normalizedScale) && normalizedScale > 0 
+        ? normalizedScale 
+        : 1.0;
+      
+      return (
+        <div className="relative w-full h-full landscape-pdf-container">
+          {/* Device Type Label */}
+          <div 
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-green-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
+            style={{ pointerEvents: 'none' }}
+          >
+            Device: {(() => {
+              try {
+                const deviceType = getDeviceType();
+                return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
+              } catch (error) {
+                console.error('PDFViewerAndroid: Error getting device type', error);
+                return 'UNKNOWN';
+              }
+            })()}
+          </div>
+          {isLoading && isValidLoadingComponent && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+              {(() => {
+                try {
+                  return React.isValidElement(LoadingComponent) ? LoadingComponent : <LoadingComponent />;
+                } catch (error) {
+                  console.error('PDFViewerAndroid: Error rendering loading component', error);
+                  return <div className="p-8 text-center text-gray-600">Loading PDF...</div>;
+                }
+              })()}
+            </div>
+          )}
+          <object
+            ref={objectRef}
+            data={pdfUrl || undefined}
+            type="application/pdf"
+            className="w-full h-full"
+            style={{
+              transform: `scale(${safeScale})`,
+              transformOrigin: 'center center',
+              width: `${100 / safeScale}%`,
+              height: `${100 / safeScale}%`,
+              maxWidth: '100vw',
+              maxHeight: '100vh',
+            }}
+            onLoad={handleObjectLoad}
+            onError={handleObjectError}
+          >
+            <div className="p-8 text-center text-gray-600">
+              <p className="mb-4">PDF viewer not supported.</p>
+              {pdfUrl && (
+                <a 
+                  href={pdfUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline hover:text-blue-700"
+                >
+                  Download PDF
+                </a>
+              )}
+            </div>
+          </object>
+        </div>
+      );
+    } catch (error) {
+      console.error('PDFViewerAndroid: Error rendering object tag viewer', error);
+      return (
+        <div className="w-full h-full flex items-center justify-center p-8 text-center text-red-600">
+          <div>
+            <p className="mb-4">Error rendering PDF viewer (object tag).</p>
+            <p className="text-sm text-gray-500">Error: {error?.message || 'Unknown error'}</p>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // Primary: Use iframe (works on most Android browsers) - Landscape optimized
+  try {
+    const pdfUrl = getPdfUrl();
+    const safeScale = typeof normalizedScale === 'number' && !isNaN(normalizedScale) && normalizedScale > 0 
+      ? normalizedScale 
+      : 1.0;
+    
     return (
       <div className="relative w-full h-full landscape-pdf-container">
         {/* Device Type Label */}
         <div 
-          className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-green-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-purple-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
           style={{ pointerEvents: 'none' }}
         >
           Device: {(() => {
@@ -132,87 +300,67 @@ export const PDFViewerAndroid = ({
               const deviceType = getDeviceType();
               return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
             } catch (error) {
+              console.error('PDFViewerAndroid: Error getting device type', error);
               return 'UNKNOWN';
             }
           })()}
         </div>
         {isLoading && isValidLoadingComponent && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-            {React.isValidElement(LoadingComponent) ? LoadingComponent : <LoadingComponent />}
+            {(() => {
+              try {
+                if (React.isValidElement(LoadingComponent)) {
+                  return LoadingComponent;
+                } else if (typeof LoadingComponent === 'function') {
+                  return <LoadingComponent />;
+                }
+                return null;
+              } catch (error) {
+                console.error('PDFViewerAndroid: Error rendering loading component', error);
+                return <div className="p-8 text-center text-gray-600">Loading PDF...</div>;
+              }
+            })()}
           </div>
         )}
-        <object
-          ref={objectRef}
-          data={getPdfUrl()}
-          type="application/pdf"
-          className="w-full h-full"
+        <iframe
+          ref={iframeRef}
+          src={pdfUrl || undefined}
+          className="w-full h-full border-0"
           style={{
-            transform: `scale(${normalizedScale})`,
+            transform: `scale(${safeScale})`,
             transformOrigin: 'center center',
-            width: `${100 / normalizedScale}%`,
-            height: `${100 / normalizedScale}%`,
+            width: `${100 / safeScale}%`,
+            height: `${100 / safeScale}%`,
             maxWidth: '100vw',
             maxHeight: '100vh',
           }}
-          onLoad={handleObjectLoad}
-          onError={handleObjectError}
-        >
-          <div className="p-8 text-center text-gray-600">
-            <p className="mb-4">PDF viewer not supported.</p>
+          onLoad={handleIframeLoad}
+          onError={handleIframeError}
+          title="PDF Viewer"
+          allow="fullscreen"
+        />
+      </div>
+    );
+  } catch (error) {
+    console.error('PDFViewerAndroid: Error rendering iframe viewer', error);
+    return (
+      <div className="w-full h-full flex items-center justify-center p-8 text-center text-red-600">
+        <div>
+          <p className="mb-4">Error rendering PDF viewer (iframe).</p>
+          <p className="text-sm text-gray-500">Error: {error?.message || 'Unknown error'}</p>
+          {normalizedFile && (
             <a 
-              href={getPdfUrl()} 
+              href={String(normalizedFile)} 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-blue-500 underline hover:text-blue-700"
+              className="text-blue-500 underline hover:text-blue-700 mt-4 inline-block"
             >
               Download PDF
             </a>
-          </div>
-        </object>
+          )}
+        </div>
       </div>
     );
   }
-
-  // Primary: Use iframe (works on most Android browsers) - Landscape optimized
-  return (
-    <div className="relative w-full h-full landscape-pdf-container">
-      {/* Device Type Label */}
-      <div 
-        className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-purple-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
-        style={{ pointerEvents: 'none' }}
-      >
-        Device: {(() => {
-          try {
-            const deviceType = getDeviceType();
-            return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
-          } catch (error) {
-            return 'UNKNOWN';
-          }
-        })()}
-      </div>
-      {isLoading && isValidLoadingComponent && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-          {React.isValidElement(LoadingComponent) ? LoadingComponent : (typeof LoadingComponent === 'function' ? <LoadingComponent /> : null)}
-        </div>
-      )}
-      <iframe
-        ref={iframeRef}
-        src={getPdfUrl()}
-        className="w-full h-full border-0"
-        style={{
-          transform: `scale(${normalizedScale})`,
-          transformOrigin: 'center center',
-          width: `${100 / normalizedScale}%`,
-          height: `${100 / normalizedScale}%`,
-          maxWidth: '100vw',
-          maxHeight: '100vh',
-        }}
-        onLoad={handleIframeLoad}
-        onError={handleIframeError}
-        title="PDF Viewer"
-        allow="fullscreen"
-      />
-    </div>
-  );
 };
 
