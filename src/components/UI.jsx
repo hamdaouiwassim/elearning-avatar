@@ -1266,9 +1266,9 @@ clearInterval(positionSaveIntervalRef.current);
       <div className="fixed top-0 left-0 right-0 bottom-0 z-20 flex justify-between p-4 flex-col pointer-events-none">
         <div className="self-start backdrop-blur-md bg-white bg-opacity-50 p-4 rounded-lg">
           <div className="flex items-center justify-between gap-4">
-            <div>
+            {/* <div>
               <h1 className="font-black text-xl">Titan Academy</h1>
-              {/* <p>I will always love you ❤️</p> */}
+         
               {selectedCourse && (
                 <div className="mt-1">
                   <p className="text-sm text-gray-600 font-semibold">
@@ -1281,8 +1281,8 @@ clearInterval(positionSaveIntervalRef.current);
                   )}
                 </div>
               )}
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
+            </div> */}
+            {/* <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
               {selectedCourse?.hasStatements && onOpenLab && (
                 <button
                   onClick={() => onOpenLab(selectedCourse)}
@@ -1327,7 +1327,7 @@ clearInterval(positionSaveIntervalRef.current);
                   <span>Accueil</span>
                 </button>
               )}
-            </div>
+            </div> */}
           </div>
         </div>
         {/* Main Avatar Control Buttons - Bottom Center */}

@@ -4,7 +4,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { PDFViewerAndroid } from "./PDFViewerAndroid";
 import { SimplePDFViewer } from "./SimplePDFViewer";
-import { isAndroid, isAndroidBox, getDeviceType } from "../utils/deviceDetector";
+import { isAndroid, isAndroidBox } from "../utils/deviceDetector";
 import { SafeRender } from "../utils/safeComponent";
 
 // Set up the worker for pdfjs - using local worker file from public directory
@@ -181,12 +181,30 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
     overflow: 'hidden'
   } : {};
 
+  // Determine which PDF viewer is being used
+  const getViewerName = () => {
+    if (useSimpleViewer) {
+      return "Simple PDF Viewer (Android Box)";
+    } else if (useAndroidViewer) {
+      return "Android PDF Viewer";
+    } else {
+      return "React-PDF Viewer";
+    }
+  };
+
   return (
     <SafeRender>
       <div 
         className={useSimpleViewer ? "fixed inset-0 bg-gray-100" : "fixed inset-0 z-0 bg-gray-100 overflow-auto landscape-mode"}
         style={fullscreenStyles}
       >
+        {/* PDF Viewer Type Label - shown at top for all viewers */}
+        <div 
+          className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-xl border-2 border-blue-800"
+          style={{ pointerEvents: 'none' }}
+        >
+          📄 PDF Viewer: {getViewerName()}
+        </div>
         {useSimpleViewer ? (
           // Simple PDF viewer for Android boxes - fullscreen iframe
           <SimplePDFViewer 
@@ -219,20 +237,6 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
               ) : (
                 // Standard react-pdf viewer for non-Android devices - Landscape optimized
                 <div className="relative w-full h-full">
-                  {/* Device Type Label */}
-                  <div 
-                    className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-orange-600 text-white px-3 py-1 rounded-md text-sm font-semibold shadow-lg"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    Device: {(() => {
-                      try {
-                        const deviceType = getDeviceType();
-                        return typeof deviceType === 'string' ? deviceType.toUpperCase() : 'UNKNOWN';
-                      } catch (error) {
-                        return 'UNKNOWN';
-                      }
-                    })()}
-                  </div>
                   <Document
                     file={safeFile}
                     onLoadSuccess={onDocumentLoadSuccess}
