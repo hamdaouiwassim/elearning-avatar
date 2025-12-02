@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import { PDFViewerAndroid } from "./PDFViewerAndroid";
 import { SimplePDFViewer } from "./SimplePDFViewer";
-import { isAndroid, isAndroidBox } from "../utils/deviceDetector";
+import { isAndroidBox } from "../utils/deviceDetector";
 
 // Set up the worker for pdfjs - using local worker file from public directory
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -33,9 +32,9 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
         setFile(`${API_URL}/api/documents/${document.id}/file`);
         
         // Try to get page count from document metadata if available
-        if (isAndroid && document.numPagesVisual) {
+        if (document.numPagesVisual) {
           setNumPages(document.numPagesVisual);
-        } else if (isAndroid && document.numPages) {
+        } else if (document.numPages) {
           setNumPages(document.numPages);
         }
       } else if (document.pdfUrl) {
@@ -226,28 +225,8 @@ export const PDFReader = ({ isOpen, onClose, document }) => {
                 fileUrl={file}
                 pageNumber={pageNumber}
               />
-            ) : isAndroid() ? (
-              // Android-compatible viewer using iframe (for TV)
-              <div className="w-full h-full">
-                <PDFViewerAndroid
-                  file={file}
-                  pageNumber={pageNumber}
-                  scale={scale}
-                  onLoadSuccess={onDocumentLoadSuccess}
-                  loading={
-                    <div className="p-8 text-center text-gray-600">
-                      Loading PDF...
-                    </div>
-                  }
-                  error={
-                    <div className="p-8 text-center text-red-600">
-                      Error loading PDF. Please try another file.
-                    </div>
-                  }
-                />
-              </div>
             ) : (
-              // Standard react-pdf viewer for non-Android devices
+              // Standard react-pdf viewer for all devices
               <Document
                 file={file}
                 onLoadSuccess={onDocumentLoadSuccess}

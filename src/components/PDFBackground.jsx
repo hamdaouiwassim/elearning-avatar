@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import { PDFViewerAndroid } from "./PDFViewerAndroid";
 import { SimplePDFViewer } from "./SimplePDFViewer";
-import { isAndroid, isAndroidBox } from "../utils/deviceDetector";
+import { isAndroidBox } from "../utils/deviceDetector";
 import { SafeRender } from "../utils/safeComponent";
 
 // Set up the worker for pdfjs - using local worker file from public directory
@@ -57,7 +56,7 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
           }
           
           // Try to get page count from document metadata if available
-          if (isAndroid && setNumPagesProp) {
+          if (setNumPagesProp) {
             const numPagesVisual = document.numPagesVisual;
             const numPages = document.numPages;
             if (typeof numPagesVisual === 'number' && !isNaN(numPagesVisual)) {
@@ -90,7 +89,7 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
       console.error('PDFBackground: Error processing document', error);
       setFile(null);
     }
-  }, [document, setPageNumber, setNumPagesProp, isAndroid]);
+  }, [document, setPageNumber, setNumPagesProp]);
 
   // Ensure fullscreen on Android boxes - set body/html styles
   useEffect(() => {
@@ -157,9 +156,8 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
   // Early return if no document or file is not a valid string
   if (!document || !normalizedFile) return null;
 
-  // Use simple viewer for Android boxes, full viewer for TV and other devices
+  // Use simple viewer for Android boxes, react-pdf viewer for all other devices
   const useSimpleViewer = isAndroidBox();
-  const useAndroidViewer = isAndroid() && !isAndroidBox(); // Android but not a box (TV)
 
   // Final safety check - ensure all values are primitives
   const safeFile = String(normalizedFile);
@@ -185,8 +183,6 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
   const getViewerName = () => {
     if (useSimpleViewer) {
       return "Simple PDF Viewer (Android Box)";
-    } else if (useAndroidViewer) {
-      return "Android PDF Viewer";
     } else {
       return "React-PDF Viewer";
     }
@@ -214,67 +210,45 @@ export const PDFBackground = ({ document, pageNumber, setPageNumber, scale, setS
         ) : (
           <div className="min-h-full flex items-center justify-center p-2 lg:p-4">
             <div className="bg-white shadow-2xl w-full h-full flex items-center justify-center">
-              {useAndroidViewer ? (
-                // Android-compatible viewer using iframe - Landscape optimized (for TV)
-                <div className="w-full h-full">
-                  <PDFViewerAndroid
-                    file={safeFile}
+              {/* Standard react-pdf viewer - Landscape optimized */}
+              <div className="relative w-full h-full">
+                <Document
+                  file={safeFile}
+                  onLoadSuccess={onDocumentLoadSuccess}
+                  loading={
+                    <div className="p-8 text-center text-gray-600">
+                      Loading PDF...
+                    </div>
+                  }
+                  error={
+                    <div className="p-8 text-center text-red-600">
+                      Error loading PDF. Please try another file.
+                    </div>
+                  }
+                >
+                  <Page
                     pageNumber={safePageNumber}
                     scale={safeScale}
-                    onLoadSuccess={onDocumentLoadSuccess}
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
                     loading={
-                      <div className="p-8 text-center text-gray-600">
-                        Loading PDF...
+                      <div className="p-8 text-center text-gray-500">
+                        Loading page...
                       </div>
                     }
-                    error={
-                      <div className="p-8 text-center text-red-600">
-                        Error loading PDF. Please try another file.
-                      </div>
-                    }
-                  />
-                </div>
-              ) : (
-                // Standard react-pdf viewer for non-Android devices - Landscape optimized
-                <div className="relative w-full h-full">
-                  <Document
-                    file={safeFile}
-                    onLoadSuccess={onDocumentLoadSuccess}
-                    loading={
-                      <div className="p-8 text-center text-gray-600">
-                        Loading PDF...
-                      </div>
-                    }
-                    error={
-                      <div className="p-8 text-center text-red-600">
-                        Error loading PDF. Please try another file.
-                      </div>
-                    }
-                  >
-                    <Page
-                      pageNumber={safePageNumber}
-                      scale={safeScale}
-                      renderTextLayer={true}
-                      renderAnnotationLayer={true}
-                      loading={
-                        <div className="p-8 text-center text-gray-500">
-                          Loading page...
-                        </div>
+                    // Optimize for landscape and TV performance
+                    devicePixelRatio={typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' ? window.devicePixelRatio : 1}
+                    width={(() => {
+                      if (typeof window !== 'undefined' && typeof window.innerWidth === 'number' && window.innerWidth > 0) {
+                        const calculatedWidth = window.innerWidth * 0.95;
+                        // Ensure minimum width of 200px for very small screens
+                        return Math.max(200, calculatedWidth);
                       }
-                      // Optimize for landscape and TV performance
-                      devicePixelRatio={typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' ? window.devicePixelRatio : 1}
-                      width={(() => {
-                        if (typeof window !== 'undefined' && typeof window.innerWidth === 'number' && window.innerWidth > 0) {
-                          const calculatedWidth = window.innerWidth * 0.95;
-                          // Ensure minimum width of 200px for very small screens
-                          return Math.max(200, calculatedWidth);
-                        }
-                        return 800;
-                      })()}
-                    />
-                  </Document>
-                </div>
-              )}
+                      return 800;
+                    })()}
+                  />
+                </Document>
+              </div>
             </div>
           </div>
         )}
