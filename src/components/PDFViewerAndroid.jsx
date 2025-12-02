@@ -20,6 +20,8 @@ export const PDFViewerAndroid = ({
   const iframeRef = useRef(null);
   const objectRef = useRef(null);
   const [useObject, setUseObject] = useState(false);
+  const loadingTimeoutRef = useRef(null);
+  const checkIntervalRef = useRef(null);
 
   // Validate and normalize props to prevent object rendering errors
   const normalizedPageNumber = typeof pageNumber === 'number' && !isNaN(pageNumber) ? pageNumber : (typeof pageNumber === 'string' ? parseInt(pageNumber, 10) || 1 : 1);
@@ -32,25 +34,82 @@ export const PDFViewerAndroid = ({
   const isValidLoadingComponent = LoadingComponent && (React.isValidElement(LoadingComponent) || typeof LoadingComponent === 'function');
   const isValidErrorComponent = ErrorComponent && (React.isValidElement(ErrorComponent) || typeof ErrorComponent === 'function');
 
+  // Reset state when file changes
   useEffect(() => {
-    if (!normalizedFile) return;
+    if (!normalizedFile) {
+      setIsLoading(false);
+      return;
+    }
     
     setIsLoading(true);
     setHasError(false);
+    setUseObject(false);
     
-    // Try iframe first, fallback to object after timeout
-    const timer = setTimeout(() => {
-      if (isLoading) {
-        // If still loading, try object tag as fallback
-        setUseObject(true);
-      }
-    }, 3000);
+    // Clear any existing timers
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+    if (checkIntervalRef.current) {
+      clearInterval(checkIntervalRef.current);
+    }
+  }, [normalizedFile]);
 
-    return () => clearTimeout(timer);
-  }, [normalizedFile, isLoading]);
+  // Check if iframe has loaded content (polling mechanism for Android)
+  useEffect(() => {
+    if (!normalizedFile || useObject) return;
+
+    // Wait a bit for iframe to mount, then start checking
+    const initTimer = setTimeout(() => {
+      if (!iframeRef.current) return;
+
+      // Set a timeout to hide loading after a reasonable time (even if onLoad doesn't fire)
+      loadingTimeoutRef.current = setTimeout(() => {
+        setIsLoading(false);
+        if (onLoadSuccess) {
+          onLoadSuccess({ numPages: 100 });
+        }
+      }, 2000); // Hide loading after 2 seconds
+
+      // Also try to check if iframe content is accessible
+      checkIntervalRef.current = setInterval(() => {
+        try {
+          const iframe = iframeRef.current;
+          if (iframe && iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+            setIsLoading(false);
+            if (onLoadSuccess) {
+              onLoadSuccess({ numPages: 100 });
+            }
+            if (checkIntervalRef.current) {
+              clearInterval(checkIntervalRef.current);
+            }
+          }
+        } catch (e) {
+          // Cross-origin or other error - ignore, timeout will handle it
+        }
+      }, 500);
+    }, 100); // Small delay to ensure iframe is mounted
+
+    return () => {
+      clearTimeout(initTimer);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+      }
+    };
+  }, [normalizedFile, useObject, onLoadSuccess]);
 
   // Handle iframe load
   const handleIframeLoad = () => {
+    // Clear timers
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+    if (checkIntervalRef.current) {
+      clearInterval(checkIntervalRef.current);
+    }
+    
     setIsLoading(false);
     setHasError(false);
     
@@ -190,11 +249,6 @@ export const PDFViewerAndroid = ({
           }
         })()}
       </div>
-      {isLoading && isValidLoadingComponent && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-          {React.isValidElement(LoadingComponent) ? LoadingComponent : (typeof LoadingComponent === 'function' ? <LoadingComponent /> : null)}
-        </div>
-      )}
       <iframe
         ref={iframeRef}
         src={getPdfUrl()}
@@ -206,12 +260,25 @@ export const PDFViewerAndroid = ({
           height: `${100 / normalizedScale}%`,
           maxWidth: '100vw',
           maxHeight: '100vh',
+          position: 'relative',
+          zIndex: 1,
         }}
         onLoad={handleIframeLoad}
         onError={handleIframeError}
         title="PDF Viewer"
         allow="fullscreen"
       />
+      {isLoading && isValidLoadingComponent && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center bg-gray-100 z-20"
+          style={{ 
+            backgroundColor: 'rgba(243, 244, 246, 0.9)',
+            pointerEvents: 'none'
+          }}
+        >
+          {React.isValidElement(LoadingComponent) ? LoadingComponent : (typeof LoadingComponent === 'function' ? <LoadingComponent /> : null)}
+        </div>
+      )}
     </div>
   );
 };
