@@ -8,6 +8,7 @@ import { OldBrowserError } from "./components/OldBrowserError";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { checkCapabilities, isOldBrowser } from "./utils/capabilityChecker";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
+import { isAndroid } from "./utils/deviceDetector";
 
 // Lazy load heavy components for better TV performance with retry logic
 const Experience = lazyWithRetry(() => import("./components/Experience").then(module => ({ default: module.Experience })));
@@ -32,6 +33,26 @@ function App() {
     const caps = checkCapabilities();
     setCapabilities(caps);
     setCapabilityCheckDone(true);
+  }, []);
+
+  // Preload critical modules on Android devices to prevent loading failures
+  useEffect(() => {
+    if (isAndroid()) {
+      // Preload UI component as it's critical and often fails on Android
+      const preloadModules = async () => {
+        try {
+          // Preload UI component
+          await import("./components/UI");
+          console.log("Android: Preloaded UI module successfully");
+        } catch (error) {
+          console.warn("Android: Failed to preload UI module:", error);
+        }
+      };
+      
+      // Delay preloading slightly to not interfere with initial render
+      const timer = setTimeout(preloadModules, 500);
+      return () => clearTimeout(timer);
+    }
   }, []);
   
   // Delay Canvas rendering slightly (only for the learning view) to prioritize PDF loading on TV

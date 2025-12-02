@@ -4,7 +4,9 @@ import legacy from '@vitejs/plugin-legacy'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  // Explicitly set base path (use './' for relative paths, '/' for absolute)
+  // Base path: Use '/' for absolute paths (works with IP addresses)
+  // Note: For Android devices, ensure server CORS allows Android WebView
+  // If issues persist, consider using './' for relative paths
   base: '/',
   plugins: [
     react(),

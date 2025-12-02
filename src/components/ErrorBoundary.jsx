@@ -87,7 +87,25 @@ export class ErrorBoundary extends React.Component {
   }
 
   handleReload = () => {
-    window.location.reload();
+    // Clear cache and reload for Android devices
+    if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+      // Force reload without cache
+      window.location.href = window.location.href.split('#')[0] + '?t=' + Date.now();
+    } else {
+      window.location.reload();
+    }
+  };
+
+  handleClearCache = () => {
+    // Clear various caches that might cause issues on Android
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => caches.delete(name));
+        this.handleReload();
+      });
+    } else {
+      this.handleReload();
+    }
   };
 
   render() {
@@ -158,6 +176,14 @@ export class ErrorBoundary extends React.Component {
               >
                 Reload Page
               </button>
+              {typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent) && (
+                <button
+                  onClick={this.handleClearCache}
+                  className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Clear Cache & Reload
+                </button>
+              )}
               <button
                 onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
                 className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
