@@ -1,20 +1,13 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { useChat } from "../hooks/useChat";
-import { Document, Page, pdfjs } from "react-pdf";
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
-
-// Set up the worker for pdfjs
-pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
 
 export const UI = ({
-  hidden,
   pdfReaderOpen,
-  setPdfReaderOpen,
   selectedCourse,
   onBackToHome,
+  onSelectChapter,
   onOpenLab,
   pdfPageNumber,
   setPdfPageNumber,
@@ -139,12 +132,22 @@ export const UI = ({
   const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number}
   const [hasPlayedOnce, setHasPlayedOnce] = useState(false); // Track if audio has been played for current document
 
+  // Chapters sidebar state
+  const [chapters, setChapters] = useState([]);
+  const [chaptersLoading, setChaptersLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Sidebar open by default
+
   // Fetch page timing metadata for synchronization
-  const fetchPageTimings = useCallback(async (docId) => {
+  const fetchPageTimings = useCallback(async (docId, courseId) => {
     if (!docId) return;
     
     try {
-      const response = await fetch(`${API_URL}/api/documents/${docId}/page-timings`, {
+      // Use chapter endpoint if courseId is available, otherwise fallback to documents endpoint
+      const endpoint = courseId 
+        ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/page-timings`
+        : `${API_URL}/api/documents/${docId}/page-timings`;
+      
+      const response = await fetch(endpoint, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -192,6 +195,35 @@ export const UI = ({
     return sortedTimings[0]?.page || 1;
   };
 
+  // Fetch chapters for sidebar
+  useEffect(() => {
+    const loadChapters = async () => {
+      if (!selectedCourse?.courseId) {
+        setChapters([]);
+        return;
+      }
+
+      setChaptersLoading(true);
+      try {
+        const response = await fetch(`${API_URL}/api/courses/${selectedCourse.courseId}/chapters`);
+        if (response.ok) {
+          const data = await response.json();
+          const chaptersArray = Array.isArray(data) ? data : [data];
+          setChapters(chaptersArray);
+        } else {
+          setChapters([]);
+        }
+      } catch (error) {
+        console.error("Error loading chapters:", error);
+        setChapters([]);
+      } finally {
+        setChaptersLoading(false);
+      }
+    };
+
+    loadChapters();
+  }, [selectedCourse?.courseId]);
+
   // Reset audio when document changes
   useEffect(() => {
     if (selectedCourse) {
@@ -224,10 +256,10 @@ export const UI = ({
       if (selectedCourse.id) {
         localStorage.removeItem(`audio_position_${selectedCourse.id}`);
         // Fetch page timings for synchronization
-        fetchPageTimings(selectedCourse.id);
+        fetchPageTimings(selectedCourse.id, selectedCourse.courseId);
       }
     }
-  }, [selectedCourse?.id, fetchPageTimings, setAudioElement, setAudioId]);
+  }, [selectedCourse?.id, selectedCourse?.courseId, fetchPageTimings, setAudioElement, setAudioId]);
 
   const handlePlay = async () => {
     if (!selectedCourse || !selectedCourse.id) {
@@ -462,10 +494,15 @@ clearInterval(positionSaveIntervalRef.current);
       }
 
       const docId = selectedCourse.id;
+      const courseId = selectedCourse.courseId;
       
-      // Fetch summary text
+      // Fetch summary text - use chapter endpoint if courseId is available
       try {
-        const summaryTextResponse = await fetch(`${API_URL}/api/documents/${docId}/summary`, {
+        const summaryEndpoint = courseId
+          ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/summary?language=fr`
+          : `${API_URL}/api/documents/${docId}/summary`;
+        
+        const summaryTextResponse = await fetch(summaryEndpoint, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -513,7 +550,12 @@ clearInterval(positionSaveIntervalRef.current);
         }
       } catch (checkError) {
         // Summary doesn't exist, generate it via API
-        const generateResponse = await fetch(`${API_URL}/api/documents/${docId}/summary/audio`, {
+        // Note: Chapter summary endpoint includes audio in the response, so we use the same endpoint
+        const generateEndpoint = courseId
+          ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/summary?language=fr`
+          : `${API_URL}/api/documents/${docId}/summary/audio`;
+        
+        const generateResponse = await fetch(generateEndpoint, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -573,9 +615,15 @@ clearInterval(positionSaveIntervalRef.current);
     setAnalysisLoading(true);
     try {
       const docId = selectedCourse.id;
+      const courseId = selectedCourse.courseId;
       
-      // Call the analysis API endpoint
-      const response = await fetch(`${API_URL}/api/documents/${docId}/analyze`, {
+      // Call the analysis API endpoint - use chapter endpoint if courseId is available
+      // Note: Analysis endpoint might not exist for chapters, so we fallback to documents
+      const analyzeEndpoint = courseId
+        ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/analyze`
+        : `${API_URL}/api/documents/${docId}/analyze`;
+      
+      const response = await fetch(analyzeEndpoint, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -950,103 +998,199 @@ clearInterval(positionSaveIntervalRef.current);
       });
     };
 
-    const handleSliderChange = (event) => {
-      const newPage = parseInt(event.target.value);
-      setPageNumber(newPage);
-    };
-
     if (!selectedCourse || !numPages) return null;
 
     return (
-      <div className="fixed top-1/2 left-4 transform -translate-y-1/2 z-40 pointer-events-auto">
-        <div className="bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border-2 border-pink-200 p-4">
-          {/* Vertical Layout */}
-          <div className="flex flex-col gap-3">
-            {/* Page Navigation */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-center gap-2">
-                <button
-                  onClick={goToPreviousPage}
-                  disabled={pageNumber <= 1}
-                  className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-md transition-colors text-sm"
-                >
-                  ↑
-                </button>
-              </div>
-              <span className="text-gray-700 font-medium whitespace-nowrap text-sm text-center">
-                Page {pageNumber} {numPages && `sur ${numPages}`}
-              </span>
-              <div className="flex items-center justify-center gap-2">
-                <button
-                  onClick={goToNextPage}
-                  disabled={pageNumber >= (numPages || 1)}
-                  className="bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-md transition-colors text-sm"
-                >
-                  ↓
-                </button>
-              </div>
-            </div>
-            
-            {/* Page Slider - Vertical */}
-            {numPages && numPages > 1 && (
-              <div className="flex flex-col items-center gap-2">
-                <span className="text-gray-600 text-xs font-medium">
-                  {numPages}
-                </span>
-                <input
-                  type="range"
-                  min="1"
-                  max={numPages}
-                  value={pageNumber}
-                  onChange={handleSliderChange}
-                  className="w-2 h-32 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-vertical"
-                  style={{
-                    background: `linear-gradient(to bottom, #ec4899 0%, #ec4899 ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb ${numPages > 1 ? ((pageNumber - 1) / (numPages - 1)) * 100 : 100}%, #e5e7eb 100%)`,
-                    writingMode: 'vertical-lr',
-                    transform: 'rotate(180deg)',
-                  }}
-                />
-                <span className="text-gray-600 text-xs font-medium">
-                  1
-                </span>
-              </div>
-            )}
-            
-            {/* Zoom Controls */}
-            <div className="flex flex-col items-center gap-2 border-t border-gray-200 pt-3">
-              <button
-                onClick={zoomIn}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md transition-colors text-sm"
-              >
-                +
-              </button>
-              <span className="text-gray-700 font-medium text-sm min-w-[3rem] text-center">
-                {Math.round(scale * 100)}%
-              </span>
-              <button
-                onClick={zoomOut}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md transition-colors text-sm"
-              >
-                −
-              </button>
-            </div>
+      <>
+        {/* Page Number Display - Top Center */}
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 pointer-events-auto">
+          <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg border-2 border-pink-200 px-6 py-2">
+            <span className="text-gray-800 font-semibold text-base">
+              Page {pageNumber} {numPages && `sur ${numPages}`}
+            </span>
           </div>
         </div>
-      </div>
+
+    
+      </>
     );
   };
 
-  if (hidden) {
-    return null;
-  }
-
   return (
     <>
+      {/* Chapters Sidebar */}
+      {selectedCourse?.courseId && (
+        <div 
+          className={`fixed left-0 top-0 bottom-0 z-30 bg-white shadow-2xl transition-all duration-300 pointer-events-auto ${
+            sidebarOpen ? 'w-80' : 'w-0 overflow-hidden'
+          }`}
+        >
+          <div className="h-full flex flex-col">
+            {/* Sidebar Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-pink-600 text-white">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                  />
+                </svg>
+                Chapitres
+              </h2>
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="text-white hover:text-gray-200 transition-colors"
+                title={sidebarOpen ? "Masquer" : "Afficher"}
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  {sidebarOpen ? (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  ) : (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6h16M4 12h16M4 18h16"
+                    />
+                  )}
+                </svg>
+              </button>
+            </div>
+
+            {/* Chapters List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {chaptersLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+                </div>
+              ) : chapters.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>Aucun chapitre disponible</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {chapters.map((chapter) => {
+                    const isActive = chapter.id === selectedCourse.id;
+                    return (
+                      <button
+                        key={chapter.id}
+                        onClick={() => {
+                          if (onSelectChapter && !isActive) {
+                            onSelectChapter({
+                              ...chapter,
+                              courseId: selectedCourse.courseId,
+                              courseName: selectedCourse.courseName,
+                              courseDescription: selectedCourse.courseDescription
+                            });
+                          }
+                        }}
+                        className={`w-full text-left p-3 rounded-lg transition-all ${
+                          isActive
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg'
+                            : 'bg-gray-50 hover:bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className={`font-semibold text-sm mb-1 ${isActive ? 'text-white' : 'text-gray-800'}`}>
+                              {chapter.chapterName}
+                            </h3>
+                            {chapter.chapterDescription && (
+                              <p className={`text-xs line-clamp-2 ${isActive ? 'text-purple-100' : 'text-gray-600'}`}>
+                                {chapter.chapterDescription}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-3 mt-2 text-xs">
+                              {chapter.numPagesVisual > 0 && (
+                                <span className={`flex items-center gap-1 ${isActive ? 'text-purple-100' : 'text-gray-500'}`}>
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                    />
+                                  </svg>
+                                  {chapter.numPagesVisual} pages
+                                </span>
+                              )}
+                              {chapter.webpImages && chapter.webpImages.length > 0 && (
+                                <span className={`flex items-center gap-1 ${isActive ? 'text-green-200' : 'text-green-600'}`}>
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                    />
+                                  </svg>
+                                  {chapter.webpImages.length} images
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {isActive && (
+                            <svg
+                              className="w-5 h-5 text-white flex-shrink-0 ml-2"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Answer Display Box - Left Side */}
       {answerText && (
         <div
           className={`fixed top-1/2 transform -translate-y-1/2 z-30 pointer-events-auto transition-all ${
             pdfReaderOpen
+              ? sidebarOpen
+                ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+                : "right-4 w-96 max-w-md"
+              : sidebarOpen
               ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
               : "right-4 w-96 max-w-md"
           }`}
@@ -1115,6 +1259,10 @@ clearInterval(positionSaveIntervalRef.current);
         <div
           className={`fixed z-30 pointer-events-auto transition-all ${
             pdfReaderOpen
+              ? sidebarOpen
+                ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+                : "right-4 w-96 max-w-md"
+              : sidebarOpen
               ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
               : "right-4 w-96 max-w-md"
           } ${
@@ -1194,6 +1342,10 @@ clearInterval(positionSaveIntervalRef.current);
         <div
           className={`fixed z-30 pointer-events-auto transition-all ${
             pdfReaderOpen
+              ? sidebarOpen
+                ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+                : "right-4 w-96 max-w-md"
+              : sidebarOpen
               ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
               : "right-4 w-96 max-w-md"
           } ${
@@ -1282,7 +1434,7 @@ clearInterval(positionSaveIntervalRef.current);
                 </div>
               )}
             </div> */}
-            {/* <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
+            <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
               {selectedCourse?.hasStatements && onOpenLab && (
                 <button
                   onClick={() => onOpenLab(selectedCourse)}
@@ -1327,7 +1479,7 @@ clearInterval(positionSaveIntervalRef.current);
                   <span>Accueil</span>
                 </button>
               )}
-            </div> */}
+            </div>
           </div>
         </div>
         {/* Main Avatar Control Buttons - Bottom Center */}
@@ -1599,6 +1751,29 @@ clearInterval(positionSaveIntervalRef.current);
           />
         </div>
       </div>
+
+      {/* Sidebar Toggle Button (when sidebar is closed) */}
+      {selectedCourse?.courseId && !sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="fixed left-4 top-1/2 transform -translate-y-1/2 z-40 bg-gradient-to-r from-purple-500 to-pink-600 text-white p-3 rounded-full shadow-lg hover:from-purple-600 hover:to-pink-700 transition-all pointer-events-auto"
+          title="Afficher les chapitres"
+        >
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+        </button>
+      )}
 
       {/* PDF Controls - Floating Overlay */}
       {selectedCourse && pdfPageNumber && setPdfPageNumber && (

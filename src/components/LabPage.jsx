@@ -91,7 +91,12 @@ export const LabPage = ({ onBackToHome, course }) => {
       setStatementsLoading(true);
       setStatementsError(null);
       try {
-        const response = await fetch(`${API_URL}/api/documents/${course.id}/statements`);
+        // Use chapter endpoint if courseId is available, otherwise fallback to documents
+        const statementsEndpoint = course.courseId
+          ? `${API_URL}/api/courses/${course.courseId}/chapters/${course.id}/statements`
+          : `${API_URL}/api/documents/${course.id}/statements`;
+        
+        const response = await fetch(statementsEndpoint);
         if (!response.ok) {
           throw new Error("Impossible de charger les exercices.");
         }

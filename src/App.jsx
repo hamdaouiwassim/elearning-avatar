@@ -3,6 +3,7 @@ import { Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Leva } from "leva";
 import { Home } from "./components/Home";
+import { ChapterSelection } from "./components/ChapterSelection";
 import { CapabilityError } from "./components/CapabilityError";
 import { OldBrowserError } from "./components/OldBrowserError";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -13,14 +14,15 @@ import { isAndroid } from "./utils/deviceDetector";
 // Lazy load heavy components for better TV performance with retry logic
 const Experience = lazyWithRetry(() => import("./components/Experience").then(module => ({ default: module.Experience })));
 const UI = lazyWithRetry(() => import("./components/UI").then(module => ({ default: module.UI })));
-const PDFBackground = lazyWithRetry(() => import("./components/PDFBackground").then(module => ({ default: module.PDFBackground })));
+const ImageBackground = lazyWithRetry(() => import("./components/ImageBackground").then(module => ({ default: module.ImageBackground })));
 const LabPage = lazyWithRetry(() => import("./components/LabPage").then(module => ({ default: module.LabPage })));
 
 function App() {
-  const [view, setView] = useState("home"); // home | learning | lab
+  const [view, setView] = useState("home"); // home | chapters | learning | lab
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [selectedChapter, setSelectedChapter] = useState(null);
   const [labCourse, setLabCourse] = useState(null);
-  const [pdfReaderOpen, setPdfReaderOpen] = useState(true);
+  const [pdfReaderOpen] = useState(true);
   const [pdfPageNumber, setPdfPageNumber] = useState(1);
   const [pdfScale, setPdfScale] = useState(1.0);
   const [pdfNumPages, setPdfNumPages] = useState(null);
@@ -76,8 +78,64 @@ function App() {
     }, 100);
   };
 
-  const handleStartLearning = (course) => {
-    setSelectedCourse(course);
+  const handleStartLearning = async (course) => {
+    // If it's already a chapter (has courseId), start learning directly
+    if (course.courseId) {
+      setSelectedChapter(course);
+      setSelectedCourse(course);
+      setLabCourse(null);
+      setView("learning");
+      return;
+    }
+
+    // This is a course, fetch chapters and select the first one
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+      const response = await fetch(`${API_URL}/api/courses/${course.id}/chapters`);
+      
+      if (response.ok) {
+        const chapters = await response.json();
+        const chaptersArray = Array.isArray(chapters) ? chapters : [];
+        
+        if (chaptersArray.length > 0) {
+          // Select the first chapter
+          const firstChapter = {
+            ...chaptersArray[0],
+            courseId: course.id,
+            courseName: course.courseName,
+            courseDescription: course.courseDescription
+          };
+          setSelectedChapter(firstChapter);
+          setSelectedCourse(firstChapter);
+          setLabCourse(null);
+          setView("learning");
+        } else {
+          // No chapters available, show chapter selection view
+          setSelectedCourse(course);
+          setSelectedChapter(null);
+          setLabCourse(null);
+          setView("chapters");
+        }
+      } else {
+        // Error fetching chapters, show chapter selection view
+        setSelectedCourse(course);
+        setSelectedChapter(null);
+        setLabCourse(null);
+        setView("chapters");
+      }
+    } catch (error) {
+      console.error("Error loading chapters:", error);
+      // On error, show chapter selection view
+      setSelectedCourse(course);
+      setSelectedChapter(null);
+      setLabCourse(null);
+      setView("chapters");
+    }
+  };
+
+  const handleSelectChapter = (chapter) => {
+    setSelectedChapter(chapter);
+    setSelectedCourse(chapter);
     setLabCourse(null);
     setView("learning");
   };
@@ -94,10 +152,17 @@ function App() {
   const handleBackToHome = () => {
     setView("home");
     setSelectedCourse(null);
+    setSelectedChapter(null);
     setLabCourse(null);
   };
 
+  const handleBackToChapters = () => {
+    setView("chapters");
+    setSelectedChapter(null);
+  };
+
   const isHome = view === "home";
+  const isChapters = view === "chapters";
   const isLearning = view === "learning";
   const isLab = view === "lab";
 
@@ -141,19 +206,28 @@ function App() {
       <Loader />
       <Leva hidden />
       
-      {/* PDF Background - Lazy loaded with Suspense */}
-      {isLearning && selectedCourse && (
-        <ErrorBoundary componentName="PDF Reader">
+      {/* Chapter Selection View */}
+      {isChapters && selectedCourse && (
+        <ChapterSelection
+          course={selectedCourse}
+          onSelectChapter={handleSelectChapter}
+          onBackToHome={handleBackToHome}
+        />
+      )}
+
+      {/* Image Background - Lazy loaded with Suspense */}
+      {isLearning && selectedChapter && (
+        <ErrorBoundary componentName="Image Reader">
           <Suspense fallback={
             <div className="fixed inset-0 z-0 bg-gray-100 flex items-center justify-center">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600 text-xl">Loading PDF...</p>
+                <p className="text-gray-600 text-xl">Chargement des images...</p>
               </div>
             </div>
           }>
-            <PDFBackground
-              document={selectedCourse}
+            <ImageBackground
+              document={selectedChapter}
               pageNumber={pdfPageNumber}
               setPageNumber={setPdfPageNumber}
               scale={pdfScale}
@@ -205,12 +279,12 @@ function App() {
             </div>
           </div>
         }>
-          {isLearning && selectedCourse ? (
+          {isLearning && selectedChapter ? (
             <UI
               pdfReaderOpen={pdfReaderOpen}
-              setPdfReaderOpen={setPdfReaderOpen}
-              selectedCourse={selectedCourse}
+              selectedCourse={selectedChapter}
               onBackToHome={handleBackToHome}
+              onSelectChapter={handleSelectChapter}
               pdfPageNumber={pdfPageNumber}
               setPdfPageNumber={setPdfPageNumber}
               pdfScale={pdfScale}

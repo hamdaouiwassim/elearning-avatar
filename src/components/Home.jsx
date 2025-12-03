@@ -3,31 +3,52 @@ import { useState, useEffect } from "react";
 const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
 
 export const Home = ({ onStartLearning }) => {
-  const [documents, setDocuments] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/documents`)
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
+    const loadCourses = async () => {
+      try {
+        // Fetch all courses
+        const coursesResponse = await fetch(`${API_URL}/api/courses`);
+        if (!coursesResponse.ok) {
+          throw new Error(`HTTP error! status: ${coursesResponse.status}`);
         }
-        return res.json();
-      })
-      .then((data) => {
-        // Handle both array and single object responses
-        const documentsArray = Array.isArray(data) ? data : [data];
-        setDocuments(documentsArray);
-        console.log("documentsArray",documentsArray);
+        const coursesData = await coursesResponse.json();
+        const coursesArray = Array.isArray(coursesData) ? coursesData : [coursesData];
         
+        // For each course, fetch its chapters
+        const coursesWithChapters = await Promise.all(
+          coursesArray.map(async (course) => {
+            try {
+              const chaptersResponse = await fetch(`${API_URL}/api/courses/${course.id}/chapters`);
+              if (chaptersResponse.ok) {
+                const chapters = await chaptersResponse.json();
+                return {
+                  ...course,
+                  chapters: Array.isArray(chapters) ? chapters : []
+                };
+              }
+              return { ...course, chapters: [] };
+            } catch (err) {
+              console.error(`Error loading chapters for course ${course.id}:`, err);
+              return { ...course, chapters: [] };
+            }
+          })
+        );
+        
+        setCourses(coursesWithChapters);
+        console.log("coursesWithChapters", coursesWithChapters);
         setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Error loading documents:", err);
+      } catch (err) {
+        console.error("Error loading courses:", err);
         setError(err.message);
         setLoading(false);
-      });
+      }
+    };
+
+    loadCourses();
   }, []);
 
   const formatDate = (timestamp) => {
@@ -85,71 +106,96 @@ export const Home = ({ onStartLearning }) => {
           </div>
         </div>
 
-        {/* Documents Grid */}
+        {/* Courses Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {documents.map((doc) => (
-            <div
-              key={doc.id}
-              className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden transform hover:scale-105"
-            >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Cours
-                  </span>
-                  {doc.timestamp && (
-                    <span className="text-xs text-gray-500">
-                      {formatDate(doc.timestamp)}
+          {courses.map((course) => {
+            const firstChapter = course.chapters && course.chapters.length > 0 ? course.chapters[0] : null;
+            const hasChapters = course.chapters && course.chapters.length > 0;
+            
+            return (
+              <div
+                key={course.id}
+                className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden transform hover:scale-105"
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Cours
                     </span>
-                  )}
-                </div>
-                <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                  {doc.courseName || doc.title}
-                </h3>
-                <p className="text-gray-600 mb-4 line-clamp-4 text-sm">
-                  {doc.courseDescription
-                    ? `${doc.courseDescription.substring(0, 200)}${
-                        doc.courseDescription.length > 200 ? "..." : ""
-                      }`
-                    : "Aucune description disponible"}
-                </p>
-                {doc.courseDescription && doc.courseDescription.length > 0 && (
-                  <div className="mb-4 text-sm text-gray-500">
-                    <span className="font-semibold text-gray-700">
-                      Aperçu :
-                    </span>{" "}
-                    {doc.courseDescription.length > 220
-                      ? `${doc.courseDescription.substring(0, 220)}...`
-                      : doc.courseDescription}
+                    {course.createdAt && (
+                      <span className="text-xs text-gray-500">
+                        {formatDate(course.createdAt)}
+                      </span>
+                    )}
                   </div>
-                )}
-                <button
-                  onClick={() => onStartLearning(doc)}
-                  className="w-full bg-pink-500 hover:bg-pink-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <span>Commencer l'apprentissage</span>
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                  <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                    {course.courseName}
+                  </h3>
+                  <p className="text-gray-600 mb-4 line-clamp-4 text-sm">
+                    {course.courseDescription
+                      ? `${course.courseDescription.substring(0, 200)}${
+                          course.courseDescription.length > 200 ? "..." : ""
+                        }`
+                      : "Aucune description disponible"}
+                  </p>
+                  {course.courseDescription && course.courseDescription.length > 0 && (
+                    <div className="mb-4 text-sm text-gray-500">
+                      <span className="font-semibold text-gray-700">
+                        Aperçu :
+                      </span>{" "}
+                      {course.courseDescription.length > 220
+                        ? `${course.courseDescription.substring(0, 220)}...`
+                        : course.courseDescription}
+                    </div>
+                  )}
+                  {hasChapters && (
+                    <div className="mb-4 text-sm text-gray-500">
+                      <span className="font-semibold text-gray-700">
+                        Chapitres :
+                      </span>{" "}
+                      {course.chapters.length} chapitre{course.chapters.length !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => {
+                      // Always pass the course to show chapter selection
+                      onStartLearning(course);
+                    }}
+                    disabled={!hasChapters}
+                    className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                      hasChapters
+                        ? "bg-pink-500 hover:bg-pink-600 text-white"
+                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    }`}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7l5 5m0 0l-5 5m5-5H6"
-                    />
-                  </svg>
-                </button>
+                    <span>
+                      {hasChapters ? "Commencer l'apprentissage" : "Aucun chapitre disponible"}
+                    </span>
+                    {hasChapters && (
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 7l5 5m0 0l-5 5m5-5H6"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {documents.length === 0 && (
+        {courses.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-xl text-gray-600">Aucun document disponible.</p>
+            <p className="text-xl text-gray-600">Aucun cours disponible.</p>
           </div>
         )}
       </div>

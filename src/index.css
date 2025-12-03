@@ -23,17 +23,7 @@ body.greenScreen {
   background-image: none;
 }
 
-/* PDF Reader Styles */
-.react-pdf__Page {
-  display: inline-block;
-}
-
-.react-pdf__Page__canvas {
-  max-width: 100%;
-  height: auto !important;
-}
-
-/* PDF Page Slider Styles */
+/* Page Slider Styles */
 input[type="range"].slider {
   -webkit-appearance: none;
   appearance: none;
@@ -116,31 +106,11 @@ input[type="range"].slider::-moz-range-track {
     padding: 0.5rem;
   }
   
-  /* Optimize PDF rendering for landscape screens */
-  .react-pdf__Page {
-    max-width: 95vw;
-    max-height: 90vh;
-  }
-  
-  .react-pdf__Page__canvas {
-    max-width: 100%;
-    max-height: 90vh;
-    height: auto !important;
-  }
 }
 
 /* Large screen landscape optimizations (TV/Android Box) */
 @media (orientation: landscape) and (min-width: 1024px) {
   .landscape-viewer {
     padding: 1rem;
-  }
-  
-  .react-pdf__Page {
-    max-width: 98vw;
-    max-height: 95vh;
-  }
-  
-  .react-pdf__Page__canvas {
-    max-height: 95vh;
   }
 }

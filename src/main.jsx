@@ -4,7 +4,7 @@ import "./polyfills";
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
 
-// Polyfills required by react-pdf / pdfjs-dist
+// Polyfills for browser compatibility
 import 'core-js/features/url';
 import 'core-js/features/url-search-params';
 import 'core-js/features/array/includes';
