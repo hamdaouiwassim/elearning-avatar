@@ -3,6 +3,7 @@ import { Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Leva } from "leva";
 import { Home } from "./components/Home";
+import { Login } from "./components/Login";
 import { ChapterSelection } from "./components/ChapterSelection";
 import { CapabilityError } from "./components/CapabilityError";
 import { OldBrowserError } from "./components/OldBrowserError";
@@ -10,6 +11,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { checkCapabilities, isOldBrowser } from "./utils/capabilityChecker";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { isAndroid } from "./utils/deviceDetector";
+import { checkAuthStatus, isAuthenticated } from "./utils/auth";
 
 // Lazy load heavy components for better TV performance with retry logic
 const Experience = lazyWithRetry(() => import("./components/Experience").then(module => ({ default: module.Experience })));
@@ -29,7 +31,29 @@ function App() {
   const [isCanvasReady, setIsCanvasReady] = useState(false);
   const [capabilities, setCapabilities] = useState(null);
   const [capabilityCheckDone, setCapabilityCheckDone] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
   
+  // Check authentication status on mount
+  useEffect(() => {
+    const verifyAuth = async () => {
+      // First check localStorage for quick check
+      if (isAuthenticated()) {
+        // Then verify with server
+        const isAuth = await checkAuthStatus();
+        setAuthenticated(isAuth);
+        if (!isAuth) {
+          // Clear invalid auth state
+          localStorage.removeItem("isAuthenticated");
+          localStorage.removeItem("userEmail");
+        }
+      }
+      setAuthChecking(false);
+    };
+
+    verifyAuth();
+  }, []);
+
   // Check browser/hardware capabilities on mount
   useEffect(() => {
     const caps = checkCapabilities();
@@ -156,6 +180,11 @@ function App() {
     setLabCourse(null);
   };
 
+  const handleLoginSuccess = () => {
+    setAuthenticated(true);
+    setView("home");
+  };
+
   const handleBackToChapters = () => {
     setView("chapters");
     setSelectedChapter(null);
@@ -169,6 +198,22 @@ function App() {
   // Check for old browser first (before capability check)
   if (isOldBrowser()) {
     return <OldBrowserError />;
+  }
+
+  // Show login if not authenticated
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Vérification de l'authentification...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   // Show capability error if requirements not met

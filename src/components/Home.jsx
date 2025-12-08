@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { logout, getUserEmail } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
 
@@ -6,6 +7,25 @@ export const Home = ({ onStartLearning }) => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  useEffect(() => {
+    setUserEmail(getUserEmail());
+  }, []);
+
+  // Close logout confirmation when clicking outside
+  useEffect(() => {
+    if (showLogoutConfirm) {
+      const handleClickOutside = (event) => {
+        if (!event.target.closest('.logout-container')) {
+          setShowLogoutConfirm(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showLogoutConfirm]);
 
   useEffect(() => {
     const loadCourses = async () => {
@@ -61,6 +81,11 @@ export const Home = ({ onStartLearning }) => {
     });
   };
 
+  const handleLogout = async () => {
+    await logout();
+    window.location.reload(); // Reload to show login page
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200 flex items-center justify-center">
@@ -95,13 +120,65 @@ export const Home = ({ onStartLearning }) => {
         {/* Header */}
         <div className="text-center md:text-left mb-12">
           <div className="flex flex-col gap-6">
-            <div>
-              <h1 className="text-5xl font-black text-gray-800 mb-4">
-                Titan Academy
-              </h1>
-              <p className="text-xl text-gray-600">
-                Choisissez un document et commencez à apprendre avec votre assistant virtuel
-              </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-5xl font-black text-gray-800 mb-4">
+                  Titan Academy
+                </h1>
+                <p className="text-xl text-gray-600">
+                  Choisissez un document et commencez à apprendre avec votre assistant virtuel
+                </p>
+                {userEmail && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    Connecté en tant que: <span className="font-semibold text-indigo-600">{userEmail}</span>
+                  </p>
+                )}
+              </div>
+              {userEmail && (
+                <div className="relative logout-container">
+                  <button
+                    onClick={() => setShowLogoutConfirm(true)}
+                    className="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      />
+                    </svg>
+                    Déconnexion
+                  </button>
+                  
+                  {showLogoutConfirm && (
+                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl p-4 border border-gray-200 z-50 min-w-[250px]">
+                      <p className="text-sm text-gray-700 mb-3">
+                        Êtes-vous sûr de vouloir vous déconnecter?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleLogout}
+                          className="flex-1 bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+                        >
+                          Oui, déconnexion
+                        </button>
+                        <button
+                          onClick={() => setShowLogoutConfirm(false)}
+                          className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm px-4 py-2 rounded-lg transition-colors"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
