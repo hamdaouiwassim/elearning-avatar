@@ -136,8 +136,8 @@ export const ImageBackground = ({ document, pageNumber, setPageNumber, scale, se
               src={videoUrl}
               autoPlay
               loop
-              muted
               playsInline
+              controls
               className="w-full h-full object-cover"
             />
           </div>
