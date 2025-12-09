@@ -15,7 +15,9 @@ export const ChapterSelection = ({ course, onSelectChapter, onBackToHome }) => {
       }
 
       try {
-        const response = await fetch(`${API_URL}/api/courses/${course.id}/chapters`);
+        const response = await fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
+          credentials: 'include' // Important: send session cookie
+        });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

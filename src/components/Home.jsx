@@ -9,7 +9,6 @@ export const Home = ({ onStartLearning }) => {
   const [error, setError] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
   useEffect(() => {
     setUserEmail(getUserEmail());
   }, []);
@@ -27,28 +26,37 @@ export const Home = ({ onStartLearning }) => {
     }
   }, [showLogoutConfirm]);
 
+  const [enrollingCourseId, setEnrollingCourseId] = useState(null);
+
   useEffect(() => {
     const loadCourses = async () => {
       try {
-        // Fetch all courses
-        const coursesResponse = await fetch(`${API_URL}/api/courses`);
+        // Fetch all courses (with credentials to send session cookie)
+        const coursesResponse = await fetch(`${API_URL}/api/courses`, {
+          credentials: 'include' // Important: send session cookie
+        });
         if (!coursesResponse.ok) {
           throw new Error(`HTTP error! status: ${coursesResponse.status}`);
         }
         const coursesData = await coursesResponse.json();
         const coursesArray = Array.isArray(coursesData) ? coursesData : [coursesData];
         
-        // For each course, fetch its chapters
+        // For each course, fetch its chapters (with credentials to send session cookie)
         const coursesWithChapters = await Promise.all(
           coursesArray.map(async (course) => {
             try {
-              const chaptersResponse = await fetch(`${API_URL}/api/courses/${course.id}/chapters`);
-              if (chaptersResponse.ok) {
-                const chapters = await chaptersResponse.json();
-                return {
-                  ...course,
-                  chapters: Array.isArray(chapters) ? chapters : []
-                };
+              // Only fetch chapters if user is enrolled
+              if (course.isEnrolled) {
+                const chaptersResponse = await fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
+                  credentials: 'include' // Important: send session cookie
+                });
+                if (chaptersResponse.ok) {
+                  const chapters = await chaptersResponse.json();
+                  return {
+                    ...course,
+                    chapters: Array.isArray(chapters) ? chapters : []
+                  };
+                }
               }
               return { ...course, chapters: [] };
             } catch (err) {
@@ -188,6 +196,7 @@ export const Home = ({ onStartLearning }) => {
           {courses.map((course) => {
             const firstChapter = course.chapters && course.chapters.length > 0 ? course.chapters[0] : null;
             const hasChapters = course.chapters && course.chapters.length > 0;
+            const hasSubscription = course.userHasActiveSubscription || course.hasActiveSubscription || false;
             
             return (
               <div
@@ -225,7 +234,17 @@ export const Home = ({ onStartLearning }) => {
                         : course.courseDescription}
                     </div>
                   )}
-                  {hasChapters && (
+                  {/* Enrollment Status */}
+                  {course.isEnrolled && (
+                    <div className="mb-4">
+                      <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        <i className="fas fa-check-circle mr-1"></i>
+                        Inscrit
+                      </span>
+                    </div>
+                  )}
+
+                  {hasChapters && course.isEnrolled && (
                     <div className="mb-4 text-sm text-gray-500">
                       <span className="font-semibold text-gray-700">
                         Chapitres :
@@ -233,37 +252,40 @@ export const Home = ({ onStartLearning }) => {
                       {course.chapters.length} chapitre{course.chapters.length !== 1 ? 's' : ''}
                     </div>
                   )}
-                  <button
-                    onClick={() => {
-                      // Always pass the course to show chapter selection
-                      onStartLearning(course);
-                    }}
-                    disabled={!hasChapters}
-                    className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                      hasChapters
-                        ? "bg-pink-500 hover:bg-pink-600 text-white"
-                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    }`}
-                  >
-                    <span>
-                      {hasChapters ? "Commencer l'apprentissage" : "Aucun chapitre disponible"}
-                    </span>
-                    {hasChapters && (
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M13 7l5 5m0 0l-5 5m5-5H6"
-                        />
-                      </svg>
-                    )}
-                  </button>
+
+                  {/* Action Button - Only show if user is enrolled */}
+                  {course.isEnrolled ? (
+                    <button
+                      onClick={() => {
+                        onStartLearning(course);
+                      }}
+                      disabled={!hasChapters}
+                      className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                        hasChapters
+                          ? "bg-pink-500 hover:bg-pink-600 text-white"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      <span>
+                        {hasChapters ? "Commencer l'apprentissage" : "Aucun chapitre disponible"}
+                      </span>
+                      {hasChapters && (
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 7l5 5m0 0l-5 5m5-5H6"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );

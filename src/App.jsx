@@ -115,7 +115,9 @@ function App() {
     // This is a course, fetch chapters and select the first one
     try {
       const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
-      const response = await fetch(`${API_URL}/api/courses/${course.id}/chapters`);
+      const response = await fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
+        credentials: 'include' // Important: send session cookie
+      });
       
       if (response.ok) {
         const chapters = await response.json();

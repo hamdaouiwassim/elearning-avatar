@@ -205,7 +205,9 @@ export const UI = ({
 
       setChaptersLoading(true);
       try {
-        const response = await fetch(`${API_URL}/api/courses/${selectedCourse.courseId}/chapters`);
+        const response = await fetch(`${API_URL}/api/courses/${selectedCourse.courseId}/chapters`, {
+          credentials: 'include' // Important: send session cookie
+        });
         if (response.ok) {
           const data = await response.json();
           const chaptersArray = Array.isArray(data) ? data : [data];
