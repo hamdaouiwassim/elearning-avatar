@@ -5,6 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
 
 export const Home = ({ onStartLearning }) => {
   const [courses, setCourses] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
@@ -41,27 +42,50 @@ export const Home = ({ onStartLearning }) => {
         const coursesData = await coursesResponse.json();
         const coursesArray = Array.isArray(coursesData) ? coursesData : [coursesData];
         
-        // For each course, fetch its chapters (with credentials to send session cookie)
+        // For each course, fetch its chapters AND labs
         const coursesWithChapters = await Promise.all(
           coursesArray.map(async (course) => {
             try {
+              let chapters = [];
+              let labs = [];
+              
               // Only fetch chapters if user is enrolled
               if (course.isEnrolled) {
+                // Fetch chapters
                 const chaptersResponse = await fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
                   credentials: 'include' // Important: send session cookie
                 });
                 if (chaptersResponse.ok) {
-                  const chapters = await chaptersResponse.json();
-                  return {
-                    ...course,
-                    chapters: Array.isArray(chapters) ? chapters : []
-                  };
+                  chapters = await chaptersResponse.json();
+                  chapters = Array.isArray(chapters) ? chapters : [];
+                }
+                
+                // Fetch labs for enrolled courses
+                try {
+                  const labsResponse = await fetch(`${API_URL}/api/courses/${course.id}/labs`, {
+                    credentials: 'include'
+                  });
+                  if (labsResponse.ok) {
+                    labs = await labsResponse.json();
+                    labs = Array.isArray(labs) ? labs : [];
+                    console.log(`[Home] Loaded ${labs.length} labs for course ${course.id} (${course.courseName})`);
+                  } else {
+                    console.error(`[Home] Failed to load labs for course ${course.id}:`, labsResponse.status, labsResponse.statusText);
+                  }
+                } catch (err) {
+                  console.error(`[Home] Error loading labs for course ${course.id}:`, err);
                 }
               }
-              return { ...course, chapters: [] };
+              
+              return {
+                ...course,
+                chapters,
+                labs,
+                hasLabs: labs.length > 0
+              };
             } catch (err) {
-              console.error(`Error loading chapters for course ${course.id}:`, err);
-              return { ...course, chapters: [] };
+              console.error(`Error loading data for course ${course.id}:`, err);
+              return { ...course, chapters: [], labs: [], hasLabs: false };
             }
           })
         );
@@ -93,6 +117,17 @@ export const Home = ({ onStartLearning }) => {
     await logout();
     window.location.reload(); // Reload to show login page
   };
+
+  // Filter courses based on search query
+  const filteredCourses = searchQuery.trim() === ""
+    ? courses
+    : courses.filter((course) => {
+        const query = searchQuery.toLowerCase();
+        const name = (course.courseName || "").toLowerCase();
+        const description = (course.courseDescription || "").toLowerCase();
+        const courseId = (course.id || "").toLowerCase();
+        return name.includes(query) || description.includes(query) || courseId.includes(query);
+      });
 
   if (loading) {
     return (
@@ -191,9 +226,68 @@ export const Home = ({ onStartLearning }) => {
           </div>
         </div>
 
+        {/* Search Bar */}
+        <div className="mb-8">
+          <div className="relative max-w-2xl mx-auto">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <svg
+                className="w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher un cours par nom, description ou ID..."
+              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all bg-white shadow-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600"
+                title="Effacer la recherche"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <div className="text-center mt-2 text-sm text-gray-500">
+              {filteredCourses.length === 0
+                ? "Aucun cours trouvé"
+                : `${filteredCourses.length} cours${filteredCourses.length !== 1 ? "s" : ""} trouvé${filteredCourses.length !== 1 ? "s" : ""}`}
+            </div>
+          )}
+        </div>
+
         {/* Courses Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.map((course) => {
+          {filteredCourses.map((course) => {
+            const courseImageUrl = course.courseImage
+              ? `${API_URL}/uploads/courses/${course.id}/${course.courseImage}`
+              : null;
             const firstChapter = course.chapters && course.chapters.length > 0 ? course.chapters[0] : null;
             const hasChapters = course.chapters && course.chapters.length > 0;
             const hasSubscription = course.userHasActiveSubscription || course.hasActiveSubscription || false;
@@ -203,6 +297,56 @@ export const Home = ({ onStartLearning }) => {
                 key={course.id}
                 className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden transform hover:scale-105"
               >
+                {/* Course Image */}
+                {courseImageUrl ? (
+                  <div className="w-full h-48 overflow-hidden bg-gray-200">
+                    <img
+                      src={courseImageUrl}
+                      alt={course.courseName}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                        if (e.target.nextElementSibling) {
+                          e.target.nextElementSibling.style.display = "flex";
+                        }
+                      }}
+                    />
+                    <div
+                      className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center"
+                      style={{ display: "none" }}
+                    >
+                      <svg
+                        className="w-16 h-16 text-white opacity-50"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full h-48 bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center">
+                    <svg
+                      className="w-16 h-16 text-white opacity-50"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                      />
+                    </svg>
+                  </div>
+                )}
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -253,48 +397,78 @@ export const Home = ({ onStartLearning }) => {
                     </div>
                   )}
 
-                  {/* Action Button - Only show if user is enrolled */}
-                  {course.isEnrolled ? (
-                    <button
-                      onClick={() => {
-                        onStartLearning(course);
-                      }}
-                      disabled={!hasChapters}
-                      className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                        hasChapters
-                          ? "bg-pink-500 hover:bg-pink-600 text-white"
-                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      }`}
-                    >
-                      <span>
-                        {hasChapters ? "Commencer l'apprentissage" : "Aucun chapitre disponible"}
-                      </span>
+                  {/* Action Buttons */}
+                  {course.isEnrolled && (
+                    <div className="space-y-3">
                       {hasChapters && (
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                        <button
+                          onClick={() => {
+                            onStartLearning(course);
+                          }}
+                          className="w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 bg-pink-500 hover:bg-pink-600 text-white"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 7l5 5m0 0l-5 5m5-5H6"
-                          />
-                        </svg>
+                          <span>Commencer l'apprentissage</span>
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 7l5 5m0 0l-5 5m5-5H6"
+                            />
+                          </svg>
+                        </button>
                       )}
-                    </button>
-                  ) : null}
+                      
+                      {/* Labs Button - Show if course has labs */}
+                      {course.hasLabs && (
+                        <button
+                          onClick={() => {
+                            if (window.handleOpenLabs) {
+                              window.handleOpenLabs(course);
+                            }
+                          }}
+                          className="w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white"
+                        >
+                          <i className="fas fa-flask mr-2"></i>
+                          <span>Voir les Labs ({course.labs?.length || 0})</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
 
-        {courses.length === 0 && (
+        {filteredCourses.length === 0 && !loading && (
           <div className="text-center py-12">
-            <p className="text-xl text-gray-600">Aucun cours disponible.</p>
+            {searchQuery ? (
+              <>
+                <svg
+                  className="w-16 h-16 text-gray-300 mx-auto mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                <p className="text-xl text-gray-600 mb-2">Aucun cours ne correspond à votre recherche</p>
+                <p className="text-gray-500">Essayez avec d'autres mots-clés</p>
+              </>
+            ) : (
+              <p className="text-xl text-gray-600">Aucun cours disponible.</p>
+            )}
           </div>
         )}
       </div>

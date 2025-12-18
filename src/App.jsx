@@ -12,6 +12,7 @@ import { checkCapabilities, isOldBrowser } from "./utils/capabilityChecker";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { isAndroid } from "./utils/deviceDetector";
 import { checkAuthStatus, isAuthenticated } from "./utils/auth";
+import { CourseLabs } from "./components/CourseLabs";
 
 // Lazy load heavy components for better TV performance with retry logic
 const Experience = lazyWithRetry(() => import("./components/Experience").then(module => ({ default: module.Experience })));
@@ -20,10 +21,11 @@ const ImageBackground = lazyWithRetry(() => import("./components/ImageBackground
 const LabPage = lazyWithRetry(() => import("./components/LabPage").then(module => ({ default: module.LabPage })));
 
 function App() {
-  const [view, setView] = useState("home"); // home | chapters | learning | lab
+  const [view, setView] = useState("home"); // home | chapters | learning | lab | labs
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
   const [labCourse, setLabCourse] = useState(null);
+  const [selectedLab, setSelectedLab] = useState(null); // Add this
   const [pdfReaderOpen] = useState(true);
   const [pdfPageNumber, setPdfPageNumber] = useState(1);
   const [pdfScale, setPdfScale] = useState(1.0);
@@ -33,7 +35,8 @@ function App() {
   const [capabilityCheckDone, setCapabilityCheckDone] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
-  
+  const [selectedExercise, setSelectedExercise] = useState(null);
+
   // Check authentication status on mount
   useEffect(() => {
     const verifyAuth = async () => {
@@ -74,13 +77,13 @@ function App() {
           console.warn("Android: Failed to preload UI module:", error);
         }
       };
-      
+
       // Delay preloading slightly to not interfere with initial render
       const timer = setTimeout(preloadModules, 500);
       return () => clearTimeout(timer);
     }
   }, []);
-  
+
   // Delay Canvas rendering slightly (only for the learning view) to prioritize PDF loading on TV
   useEffect(() => {
     if (view === "learning") {
@@ -91,7 +94,7 @@ function App() {
     }
     setIsCanvasReady(false);
   }, [view]);
-  
+
   // Retry capability check
   const handleRetryCapabilityCheck = () => {
     setCapabilityCheckDone(false);
@@ -118,11 +121,11 @@ function App() {
       const response = await fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
         credentials: 'include' // Important: send session cookie
       });
-      
+
       if (response.ok) {
         const chapters = await response.json();
         const chaptersArray = Array.isArray(chapters) ? chapters : [];
-        
+
         if (chaptersArray.length > 0) {
           // Select the first chapter
           const firstChapter = {
@@ -166,13 +169,20 @@ function App() {
     setView("learning");
   };
 
-  const handleOpenLab = (course) => {
-    if (!course || !course.hasStatements) {
-      return;
+  const handleOpenLab = (course, lab = null) => {
+    if (lab) {
+      // Opening from CourseLabs - pass the lab
+      setSelectedLab(lab);
+      setLabCourse(course);
+      setSelectedCourse(course);
+      setView("lab");
+    } else if (course && course.hasStatements) {
+      // Legacy: opening from old statements system
+      setLabCourse(course);
+      setSelectedCourse(course);
+      setSelectedLab(null);
+      setView("lab");
     }
-    setLabCourse(course);
-    setSelectedCourse(course);
-    setView("lab");
   };
 
   const handleBackToHome = () => {
@@ -192,10 +202,24 @@ function App() {
     setSelectedChapter(null);
   };
 
+  const handleOpenLabs = (course) => {
+    setSelectedCourse(course);
+    setView("labs");
+  };
+
+  // Make it available globally for Home component
+  useEffect(() => {
+    window.handleOpenLabs = handleOpenLabs;
+    return () => {
+      delete window.handleOpenLabs;
+    };
+  }, []);
+
   const isHome = view === "home";
   const isChapters = view === "chapters";
   const isLearning = view === "learning";
   const isLab = view === "lab";
+  const isLabs = view === "labs";
 
   // Check for old browser first (before capability check)
   if (isOldBrowser()) {
@@ -252,7 +276,7 @@ function App() {
     <>
       <Loader />
       <Leva hidden />
-      
+
       {/* Chapter Selection View */}
       {isChapters && selectedCourse && (
         <ChapterSelection
@@ -285,7 +309,7 @@ function App() {
           </Suspense>
         </ErrorBoundary>
       )}
-      
+
       {/* Avatar Canvas - Overlay - Lazy loaded with Suspense */}
       {isCanvasReady && isLearning && (
         <ErrorBoundary componentName="3D Avatar">
@@ -302,7 +326,7 @@ function App() {
               left: 0,
               zIndex: 10,
             }}
-            gl={{ 
+            gl={{
               antialias: false, // Disable antialiasing for better TV performance
               powerPreference: "high-performance",
               stencil: false,
@@ -315,7 +339,7 @@ function App() {
           </Canvas>
         </ErrorBoundary>
       )}
-      
+
       {/* Overlay content */}
       <ErrorBoundary componentName="UI Component">
         <Suspense fallback={
@@ -339,11 +363,22 @@ function App() {
               pdfNumPages={pdfNumPages}
               onOpenLab={handleOpenLab}
             />
-          ) : (
-            <LabPage onBackToHome={handleBackToHome} course={labCourse} />
-          )}
+          ) : isLab ? (
+            <LabPage onBackToHome={handleBackToHome} course={labCourse} lab={selectedLab} />
+          ) : null
+          }
         </Suspense>
       </ErrorBoundary>
+
+      {isLabs && selectedCourse && (
+        <CourseLabs
+          course={selectedCourse}
+          onBackToHome={handleBackToHome}
+          onSelectLab={handleOpenLab}
+        />
+      )}
+
+
     </>
   );
 }

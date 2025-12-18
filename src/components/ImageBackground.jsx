@@ -7,6 +7,11 @@ export const ImageBackground = ({ document, pageNumber, setPageNumber, scale, se
   const [webpImageUrls, setWebpImageUrls] = useState([]);
   const [hasVideo, setHasVideo] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
+  const [videoElement, setVideoElement] = useState(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [showVideoControls, setShowVideoControls] = useState(true);
 
   // Validate and normalize props to prevent object rendering errors
   const normalizedPageNumber = typeof pageNumber === 'number' && !isNaN(pageNumber) && pageNumber > 0 ? pageNumber : 1;
@@ -131,15 +136,125 @@ export const ImageBackground = ({ document, pageNumber, setPageNumber, scale, se
       <div className="fixed inset-0 z-0 bg-gray-100 overflow-auto landscape-mode">
         {/* Video background if provided */}
         {hasVideo && videoUrl ? (
-          <div className="h-screen w-full flex items-center justify-center overflow-hidden bg-black">
+          <div className="h-screen w-full flex items-center justify-center overflow-hidden bg-black relative">
             <video
+              ref={setVideoElement}
               src={videoUrl}
               autoPlay
               loop
               playsInline
-              controls
               className="w-full h-full object-cover"
+              onPlay={() => setIsVideoPlaying(true)}
+              onPause={() => setIsVideoPlaying(false)}
+              onTimeUpdate={(e) => setVideoCurrentTime(e.target.currentTime)}
+              onLoadedMetadata={(e) => setVideoDuration(e.target.duration)}
             />
+            {/* Custom Video Controls - Positioned above avatar (z-20) */}
+            <div 
+              className="fixed bottom-0 left-0 right-0 z-20 bg-black bg-opacity-70 backdrop-blur-sm p-4"
+              onMouseEnter={() => setShowVideoControls(true)}
+              onMouseLeave={() => setShowVideoControls(true)}
+            >
+              <div className="max-w-4xl mx-auto">
+                {/* Progress Bar */}
+                <div className="mb-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max={videoDuration || 0}
+                    value={videoCurrentTime}
+                    onChange={(e) => {
+                      if (videoElement) {
+                        videoElement.currentTime = parseFloat(e.target.value);
+                        setVideoCurrentTime(parseFloat(e.target.value));
+                      }
+                    }}
+                    className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(videoCurrentTime / videoDuration) * 100}%, #4b5563 ${(videoCurrentTime / videoDuration) * 100}%, #4b5563 100%)`
+                    }}
+                  />
+                </div>
+                
+                {/* Control Buttons */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    {/* Play/Pause Button */}
+                    <button
+                      onClick={() => {
+                        if (videoElement) {
+                          if (isVideoPlaying) {
+                            videoElement.pause();
+                          } else {
+                            videoElement.play();
+                          }
+                        }
+                      }}
+                      className="text-white hover:text-blue-400 transition-colors"
+                      aria-label={isVideoPlaying ? "Pause" : "Play"}
+                    >
+                      {isVideoPlaying ? (
+                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                        </svg>
+                      ) : (
+                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z"/>
+                        </svg>
+                      )}
+                    </button>
+                    
+                    {/* Time Display */}
+                    <span className="text-white text-sm font-mono">
+                      {formatTime(videoCurrentTime)} / {formatTime(videoDuration)}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    {/* Volume Control */}
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                      </svg>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        defaultValue="1"
+                        onChange={(e) => {
+                          if (videoElement) {
+                            videoElement.volume = parseFloat(e.target.value);
+                          }
+                        }}
+                        className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    {/* Fullscreen Button */}
+                    <button
+                      onClick={() => {
+                        if (videoElement) {
+                          if (videoElement.requestFullscreen) {
+                            videoElement.requestFullscreen();
+                          } else if (videoElement.webkitRequestFullscreen) {
+                            videoElement.webkitRequestFullscreen();
+                          } else if (videoElement.mozRequestFullScreen) {
+                            videoElement.mozRequestFullScreen();
+                          }
+                        }
+                      }}
+                      className="text-white hover:text-blue-400 transition-colors"
+                      aria-label="Fullscreen"
+                    >
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           /* WebP Image Viewer */
@@ -175,5 +290,13 @@ export const ImageBackground = ({ document, pageNumber, setPageNumber, scale, se
       </div>
     </SafeRender>
   );
+};
+
+// Helper function to format time
+const formatTime = (seconds) => {
+  if (!seconds || isNaN(seconds)) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 

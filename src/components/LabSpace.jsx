@@ -31,6 +31,33 @@ export const LabSpace = ({
     if (isRunning) return;
     setIsRunning(true);
     setError(null);
+    // Check for empty code
+    if (!code || !code.trim()) {
+      try {
+        const response = await fetch(`${API_URL}/api/lab/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: 'empty_input' }),
+        });
+
+        const payload = await response.json();
+
+        if (payload.feedback?.audioUrl && onAvatarAudio) {
+          onAvatarAudio({
+            audioUrl: payload.feedback.audioUrl,
+            audioId: payload.feedback.audioId,
+          });
+        }
+
+        setError("La zone d'interprétation est vide.");
+      } catch (err) {
+        console.error("Error fetching feedback:", err);
+      } finally {
+        setIsRunning(false);
+      }
+      return;
+    }
+
     try {
       const response = await fetch(`${API_URL}/api/lab/python/run`, {
         method: "POST",
@@ -137,17 +164,15 @@ export const LabSpace = ({
           <div className="flex rounded-full bg-gray-100 p-1 text-xs font-semibold text-gray-500">
             <button
               onClick={() => setIsCorrectionMode(false)}
-              className={`px-3 py-1 rounded-full transition ${
-                !isCorrectionMode ? "bg-white text-pink-600 shadow" : ""
-              }`}
+              className={`px-3 py-1 rounded-full transition ${!isCorrectionMode ? "bg-white text-pink-600 shadow" : ""
+                }`}
             >
               Exécuter
             </button>
             <button
               onClick={() => setIsCorrectionMode(true)}
-              className={`px-3 py-1 rounded-full transition ${
-                isCorrectionMode ? "bg-white text-purple-600 shadow" : ""
-              }`}
+              className={`px-3 py-1 rounded-full transition ${isCorrectionMode ? "bg-white text-purple-600 shadow" : ""
+                }`}
             >
               Corriger
             </button>
@@ -158,17 +183,16 @@ export const LabSpace = ({
           <button
             onClick={() => runPython({ correction: isCorrectionMode })}
             disabled={isRunning}
-            className={`flex-1 bg-pink-500 hover:bg-pink-600 text-white font-semibold py-3 rounded-xl shadow-lg transition ${
-              isRunning ? "opacity-60 cursor-not-allowed" : ""
-            }`}
+            className={`flex-1 bg-pink-500 hover:bg-pink-600 text-white font-semibold py-3 rounded-xl shadow-lg transition ${isRunning ? "opacity-60 cursor-not-allowed" : ""
+              }`}
           >
             {isRunning
               ? isCorrectionMode
                 ? "Analyse..."
                 : "Exécution..."
               : isCorrectionMode
-              ? "Lancer la correction"
-              : "Exécuter le code"}
+                ? "Lancer la correction"
+                : "Exécuter le code"}
           </button>
           <button
             onClick={() =>
@@ -179,11 +203,10 @@ export const LabSpace = ({
               })
             }
             disabled={!canReplayAvatar}
-            className={`px-4 py-3 rounded-xl border font-semibold text-sm transition ${
-              canReplayAvatar
+            className={`px-4 py-3 rounded-xl border font-semibold text-sm transition ${canReplayAvatar
                 ? "border-pink-400 text-pink-600 hover:bg-pink-50"
                 : "border-gray-200 text-gray-400 cursor-not-allowed"
-            }`}
+              }`}
           >
             Rejouer l’avatar
           </button>
@@ -191,11 +214,10 @@ export const LabSpace = ({
 
         {result?.evaluation && (
           <div
-            className={`p-4 rounded-2xl border ${
-              result.evaluation.status === "success"
+            className={`p-4 rounded-2xl border ${result.evaluation.status === "success"
                 ? "bg-green-50 border-green-200 text-green-700"
                 : "bg-red-50 border-red-200 text-red-700"
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2 font-semibold">
               <span>

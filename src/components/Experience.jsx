@@ -16,29 +16,29 @@ const Avatar = lazy(() => import("./Avatar").then(module => ({ default: module.A
 const AvatarScreenPositionTracker = ({ avatarGroup, setScreenPosition, camera }) => {
   useFrame(() => {
     if (!avatarGroup.current || !camera) return;
-    
+
     // Update the group's world matrix
     avatarGroup.current.updateWorldMatrix(true, false);
-    
+
     // Get avatar's head position in local space (approximately at y=1.8, above the body)
     const headPositionLocal = new THREE.Vector3(0, 1.8, 0);
-    
+
     // Convert to world space using the group's world matrix
     const headPositionWorld = headPositionLocal.clone();
     headPositionWorld.applyMatrix4(avatarGroup.current.matrixWorld);
-    
+
     // Project 3D world position to screen coordinates
     const vector = headPositionWorld.clone().project(camera);
-    
+
     // Convert to normalized screen coordinates (0-1)
     // Three.js project() returns coordinates in range [-1, 1], we need [0, 1]
     const x = (vector.x * 0.5 + 0.5);
     const y = (-vector.y * 0.5 + 0.5);
-    
+
     // Update screen position
     setScreenPosition({ x, y });
   });
-  
+
   return null;
 };
 
@@ -75,36 +75,7 @@ export const Experience = () => {
   const cameraControls = useRef();
   const { cameraZoomed, avatarPosition, audioElement, setAvatarScreenPosition } = useChat();
   const { camera, size } = useThree();
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const avatarGroupRef = useRef(null);
-
-  // Monitor audio playback state to detect when avatar is speaking
-  useEffect(() => {
-    if (!audioElement) {
-      setIsSpeaking(false);
-      return;
-    }
-
-    const checkAudioState = () => {
-      const playing = !audioElement.paused && !audioElement.ended && audioElement.currentTime > 0;
-      setIsSpeaking(playing);
-    };
-
-    // Check initial state
-    checkAudioState();
-
-    // Listen to audio events
-    const events = ['play', 'pause', 'ended', 'timeupdate'];
-    events.forEach(event => {
-      audioElement.addEventListener(event, checkAudioState);
-    });
-
-    return () => {
-      events.forEach(event => {
-        audioElement.removeEventListener(event, checkAudioState);
-      });
-    };
-  }, [audioElement]);
 
   useEffect(() => {
     cameraControls.current.setLookAt(0, 2, 5, 0, 1.5, 0);
@@ -142,7 +113,7 @@ export const Experience = () => {
       <Suspense>
         <Dots position-y={1.75} position-x={-0.02} />
       </Suspense>
-      <group 
+      <group
         ref={avatarGroupRef}
         rotation-y={avatarPosition === "right" ? Math.PI : 0}
         position={[avatarXPosition, 0, 0]}
@@ -156,9 +127,9 @@ export const Experience = () => {
           <Avatar />
         </Suspense>
       </group>
-      
+
       {/* Calculate avatar screen position for UI button positioning */}
-      <AvatarScreenPositionTracker 
+      <AvatarScreenPositionTracker
         avatarGroup={avatarGroupRef}
         setScreenPosition={setAvatarScreenPosition}
         camera={camera}
