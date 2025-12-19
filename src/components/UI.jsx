@@ -18,7 +18,7 @@ export const UI = ({
   const { chat, loading, cameraZoomed, setCameraZoomed, message, avatarPosition, setAvatarPosition, setAudioElement, setAudioId, audioElement, avatarScreenPosition } = useChat();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  
+
   // Monitor audio playback state to detect when avatar is speaking
   useEffect(() => {
     if (!audioElement) {
@@ -99,22 +99,22 @@ export const UI = ({
     },
     [selectedCourse?.id, isDocumentAudio, setAudioElement, setAudioId, savePosition]
   );
-  
+
   // Answer display state
   const [answerText, setAnswerText] = useState(null);
-  
+
   // Analysis display state
   const [analysisText, setAnalysisText] = useState(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
-  
+
   // Summary display state
   const [summaryText, setSummaryText] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  
+
   // Question history state
   const [questionHistory, setQuestionHistory] = useState([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  
+
   // Modal state
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [questionText, setQuestionText] = useState("");
@@ -122,12 +122,12 @@ export const UI = ({
   const [recordedAudio, setRecordedAudio] = useState(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-  
+
   // Auto-complete state
   const [suggestions, setSuggestions] = useState([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [duplicateQuestion, setDuplicateQuestion] = useState(null);
-  
+
   // Page timing synchronization state
   const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number}
   const [hasPlayedOnce, setHasPlayedOnce] = useState(false); // Track if audio has been played for current document
@@ -136,24 +136,56 @@ export const UI = ({
   const [chapters, setChapters] = useState([]);
   const [chaptersLoading, setChaptersLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true); // Sidebar open by default
+  const [showLabButton, setShowLabButton] = useState(false); // State for lab button visibility
+
+  // Check for labs with exercises
+  useEffect(() => {
+    const checkLabs = async () => {
+      // Reset state first
+      setShowLabButton(false);
+
+      if (!selectedCourse?.courseId) return;
+
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+        const response = await fetch(`${API_URL}/api/courses/${selectedCourse.courseId}/labs`, {
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const labs = await response.json();
+          // Check if any lab has at least one exercise
+          const hasExercises = Array.isArray(labs) && labs.some(lab => lab.exercisesCount > 0);
+          console.log(`[UI] Course ${selectedCourse.courseId} has labs with exercises: ${hasExercises}`);
+          setShowLabButton(hasExercises);
+        }
+      } catch (error) {
+        console.error("[UI] Error checking labs:", error);
+        setShowLabButton(false);
+      }
+    };
+
+    checkLabs();
+  }, [selectedCourse?.courseId]);
 
   // Fetch page timing metadata for synchronization
   const fetchPageTimings = useCallback(async (docId, courseId) => {
     if (!docId) return;
-    
+
     try {
       // Use chapter endpoint if courseId is available, otherwise fallback to documents endpoint
-      const endpoint = courseId 
+      const endpoint = courseId
         ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/page-timings`
         : `${API_URL}/api/documents/${docId}/page-timings`;
-      
+
       const response = await fetch(endpoint, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include', // Include session cookie for authentication
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         // Expected format: [{page: 1, time: 0}, {page: 2, time: 30.5}, ...]
@@ -180,17 +212,17 @@ export const UI = ({
   // Get the current PDF page based on audio time
   const getPageForTime = (currentTime) => {
     if (!pageTimings || pageTimings.length === 0) return null;
-    
+
     // Sort timings by time (should already be sorted, but just in case)
     const sortedTimings = [...pageTimings].sort((a, b) => a.time - b.time);
-    
+
     // Find the appropriate page for current time
     for (let i = sortedTimings.length - 1; i >= 0; i--) {
       if (currentTime >= sortedTimings[i].time) {
         return sortedTimings[i].page;
       }
     }
-    
+
     // If time is before first timing, return first page
     return sortedTimings[0]?.page || 1;
   };
@@ -253,7 +285,7 @@ export const UI = ({
         clearInterval(positionSaveIntervalRef.current);
         positionSaveIntervalRef.current = null;
       }
-      
+
       // Clear saved position for this document so it starts from beginning on load
       if (selectedCourse.id) {
         localStorage.removeItem(`audio_position_${selectedCourse.id}`);
@@ -281,11 +313,11 @@ export const UI = ({
         audioRef.current.src = documentAudioSrc;
         audioRef.current.load();
       }
-      
+
       // Set audio element and ID in context for Avatar libsync
       setAudioElement(audioRef.current);
       setAudioId(selectedCourse.id);
-      
+
       // On first play after document load, start from beginning; otherwise resume from saved position
       if (!hasPlayedOnce) {
         audioRef.current.currentTime = 0;
@@ -301,9 +333,9 @@ export const UI = ({
           audioRef.current.currentTime = savedPosition;
         }
       }
-      
+
       setIsDocumentAudio(true);
-      
+
       // Sync initial page when starting playback
       if (audioRef.current && pageTimings.length > 0 && pdfNumPages) {
         const currentTime = audioRef.current.currentTime;
@@ -312,14 +344,14 @@ export const UI = ({
           setPdfPageNumber(targetPage);
         }
       }
-      
+
       audioRef.current.play();
       setIsPlaying(true);
       setIsPaused(false);
-      
+
       // Start saving position periodically
       if (positionSaveIntervalRef.current) {
-clearInterval(positionSaveIntervalRef.current);
+        clearInterval(positionSaveIntervalRef.current);
       }
       positionSaveIntervalRef.current = setInterval(() => {
         if (audioRef.current && isDocumentAudio && !audioRef.current.paused) {
@@ -332,7 +364,7 @@ clearInterval(positionSaveIntervalRef.current);
     setTtsLoading(true);
     try {
       const audioId = selectedCourse.id;
-      
+
       // First, check if audio file already exists
       const audioUrl = `${API_URL}/audios/${audioId}.wav`;
       let audioSrc = null;
@@ -370,11 +402,11 @@ clearInterval(positionSaveIntervalRef.current);
         }
 
         const data = await ttsResponse.json();
-        
+
         if (data.audioData && data.mimeType) {
           setAudioData(data.audioData);
           setAudioMimeType(data.mimeType);
-          
+
           // Create audio source from base64 data
           audioSrc = `data:${data.mimeType};base64,${data.audioData}`;
           // Store document audio source for later restoration
@@ -388,14 +420,14 @@ clearInterval(positionSaveIntervalRef.current);
       if (audioSrc && audioRef.current) {
         audioRef.current.src = audioSrc;
         audioRef.current.load();
-        
+
         // Store document audio source
         setDocumentAudioSrc(audioSrc);
-        
+
         // Set audio element and ID in context for Avatar libsync
         setAudioElement(audioRef.current);
         setAudioId(audioId);
-        
+
         // On first play after document load, start from beginning; otherwise resume from saved position
         if (!hasPlayedOnce) {
           audioRef.current.currentTime = 0;
@@ -411,9 +443,9 @@ clearInterval(positionSaveIntervalRef.current);
             audioRef.current.currentTime = savedPosition;
           }
         }
-        
+
         setIsDocumentAudio(true);
-        
+
         // Sync initial page when starting playback
         if (audioRef.current && pageTimings.length > 0 && pdfNumPages) {
           const currentTime = audioRef.current.currentTime;
@@ -422,11 +454,11 @@ clearInterval(positionSaveIntervalRef.current);
             setPdfPageNumber(targetPage);
           }
         }
-        
+
         await audioRef.current.play();
         setIsPlaying(true);
         setIsPaused(false);
-        
+
         // Start saving position periodically
         if (positionSaveIntervalRef.current) {
           clearInterval(positionSaveIntervalRef.current);
@@ -450,7 +482,7 @@ clearInterval(positionSaveIntervalRef.current);
       audioRef.current.pause();
       setIsPlaying(false);
       setIsPaused(true);
-      
+
       // Save position when paused
       if (selectedCourse?.id && isDocumentAudio) {
         savePosition(selectedCourse.id, audioRef.current.currentTime);
@@ -464,7 +496,7 @@ clearInterval(positionSaveIntervalRef.current);
       setShowQuestionModal(false);
       setShowHistoryModal(false);
       setAnswerText(null);
-      
+
       audioRef.current.play();
       setIsPlaying(true);
       setIsPaused(false);
@@ -497,13 +529,13 @@ clearInterval(positionSaveIntervalRef.current);
 
       const docId = selectedCourse.id;
       const courseId = selectedCourse.courseId;
-      
+
       // Fetch summary text - use chapter endpoint if courseId is available
       try {
         const summaryEndpoint = courseId
           ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/summary?language=fr`
           : `${API_URL}/api/documents/${docId}/summary`;
-        
+
         const summaryTextResponse = await fetch(summaryEndpoint, {
           method: "GET",
           headers: {
@@ -513,7 +545,7 @@ clearInterval(positionSaveIntervalRef.current);
 
         if (summaryTextResponse.ok) {
           const summaryData = await summaryTextResponse.json();
-          
+
           // Display the summary text
           if (summaryData.summary) {
             setSummaryText(summaryData.summary);
@@ -556,7 +588,7 @@ clearInterval(positionSaveIntervalRef.current);
         const generateEndpoint = courseId
           ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/summary?language=fr`
           : `${API_URL}/api/documents/${docId}/summary/audio`;
-        
+
         const generateResponse = await fetch(generateEndpoint, {
           method: "GET",
           headers: {
@@ -570,7 +602,7 @@ clearInterval(positionSaveIntervalRef.current);
 
         // The response is JSON with audioData (base64) and mimeType
         const data = await generateResponse.json();
-        
+
         if (data.audioData && data.mimeType) {
           // Create audio source from base64 data
           audioUrl = `data:${data.mimeType};base64,${data.audioData}`;
@@ -618,13 +650,13 @@ clearInterval(positionSaveIntervalRef.current);
     try {
       const docId = selectedCourse.id;
       const courseId = selectedCourse.courseId;
-      
+
       // Call the analysis API endpoint - use chapter endpoint if courseId is available
       // Note: Analysis endpoint might not exist for chapters, so we fallback to documents
       const analyzeEndpoint = courseId
         ? `${API_URL}/api/courses/${courseId}/chapters/${docId}/analyze`
         : `${API_URL}/api/documents/${docId}/analyze`;
-      
+
       const response = await fetch(analyzeEndpoint, {
         method: "GET",
         headers: {
@@ -637,7 +669,7 @@ clearInterval(positionSaveIntervalRef.current);
       }
 
       const data = await response.json();
-      
+
       // Display the analysis text
       if (data.analysis) {
         setAnalysisText(data.analysis);
@@ -765,7 +797,7 @@ clearInterval(positionSaveIntervalRef.current);
     const value = e.target.value;
     setQuestionText(value);
     findSuggestions(value);
-    
+
     // Check for duplicate in real-time
     if (value.trim()) {
       const duplicate = checkDuplicateQuestion(value.trim());
@@ -835,10 +867,10 @@ clearInterval(positionSaveIntervalRef.current);
             positionSaveIntervalRef.current = null;
           }
         }
-        
+
         // Store the answer text to display
         setAnswerText(data.answer);
-        
+
         // Play the audio response (this is answer audio, not document audio)
         const audioUrl = data.audioUrl.startsWith("http")
           ? data.audioUrl
@@ -881,7 +913,7 @@ clearInterval(positionSaveIntervalRef.current);
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 16000,
@@ -904,13 +936,13 @@ clearInterval(positionSaveIntervalRef.current);
       mediaRecorder.onstop = async () => {
         // Convert to WAV format for French audio
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        
+
         // For now, we'll use the webm blob directly
         // If your backend requires WAV, you'll need to convert it
         // For simplicity, we'll send webm - backend should handle conversion
         const audioUrl = URL.createObjectURL(audioBlob);
         setRecordedAudio({ blob: audioBlob, url: audioUrl });
-        
+
         // Stop all tracks to release microphone
         stream.getTracks().forEach((track) => track.stop());
       };
@@ -969,7 +1001,7 @@ clearInterval(positionSaveIntervalRef.current);
       }
     } catch (error) {
       console.error("Error playing history answer:", error);
-        alert("Échec de la lecture de l'audio de la réponse.");
+      alert("Échec de la lecture de l'audio de la réponse.");
     }
   };
 
@@ -1013,7 +1045,7 @@ clearInterval(positionSaveIntervalRef.current);
           </div>
         </div>
 
-    
+
       </>
     );
   };
@@ -1022,58 +1054,60 @@ clearInterval(positionSaveIntervalRef.current);
     <>
       {/* Chapters Sidebar */}
       {selectedCourse?.courseId && (
-        <div 
-          className={`fixed left-0 top-0 bottom-0 z-30 bg-white shadow-2xl transition-all duration-300 pointer-events-auto ${
-            sidebarOpen ? 'w-80' : 'w-0 overflow-hidden'
-          }`}
+        <div
+          className={`fixed left-0 top-0 bottom-0 z-30 bg-white shadow-2xl transition-all duration-300 pointer-events-auto ${sidebarOpen ? 'w-80' : 'w-0 overflow-hidden'
+            }`}
         >
           <div className="h-full flex flex-col">
             {/* Sidebar Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-pink-600 text-white">
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                  />
-                </svg>
-                Chapitres
-              </h2>
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="text-white hover:text-gray-200 transition-colors"
-                title={sidebarOpen ? "Masquer" : "Afficher"}
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  {sidebarOpen ? (
+            <div className="flex flex-col border-b border-gray-200 bg-gradient-to-r from-purple-500 to-pink-600 text-white">
+              <div className="flex items-center justify-between p-4">
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
+                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
                     />
-                  ) : (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
-                  )}
-                </svg>
-              </button>
+                  </svg>
+                  Chapitres
+                </h2>
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  title={sidebarOpen ? "Masquer" : "Afficher"}
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    {sidebarOpen ? (
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    ) : (
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 6h16M4 12h16M4 18h16"
+                      />
+                    )}
+                  </svg>
+                </button>
+              </div>
+
             </div>
 
             {/* Chapters List */}
@@ -1103,11 +1137,10 @@ clearInterval(positionSaveIntervalRef.current);
                             });
                           }
                         }}
-                        className={`w-full text-left p-3 rounded-lg transition-all ${
-                          isActive
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg'
-                            : 'bg-gray-50 hover:bg-gray-100 text-gray-800'
-                        }`}
+                        className={`w-full text-left p-3 rounded-lg transition-all ${isActive
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg'
+                          : 'bg-gray-50 hover:bg-gray-100 text-gray-800'
+                          }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -1180,6 +1213,22 @@ clearInterval(positionSaveIntervalRef.current);
                 </div>
               )}
             </div>
+
+            {/* Lab Button (Footer) */}
+            {(showLabButton || selectedCourse?.hasStatements) && onOpenLab && (
+              <div className="p-4 border-t border-gray-200 bg-gray-50">
+                <button
+                  onClick={() => onOpenLab(selectedCourse)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all font-bold text-sm transform hover:scale-[1.02]"
+                  title="Accéder aux exercices pratiques"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                  </svg>
+                  Accéder au Labo
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1187,15 +1236,14 @@ clearInterval(positionSaveIntervalRef.current);
       {/* Answer Display Box - Left Side */}
       {answerText && (
         <div
-          className={`fixed top-1/2 transform -translate-y-1/2 z-30 pointer-events-auto transition-all ${
-            pdfReaderOpen
-              ? sidebarOpen
-                ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
-                : "right-4 w-96 max-w-md"
-              : sidebarOpen
+          className={`fixed top-1/2 transform -translate-y-1/2 z-30 pointer-events-auto transition-all ${pdfReaderOpen
+            ? sidebarOpen
               ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
               : "right-4 w-96 max-w-md"
-          }`}
+            : sidebarOpen
+              ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+              : "right-4 w-96 max-w-md"
+            }`}
         >
           <div className="bg-white rounded-xl shadow-2xl p-6 border-2 border-pink-200 max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between mb-3">
@@ -1259,21 +1307,19 @@ clearInterval(positionSaveIntervalRef.current);
       {/* Analysis Display Box - Left Side */}
       {analysisText && (
         <div
-          className={`fixed z-30 pointer-events-auto transition-all ${
-            pdfReaderOpen
-              ? sidebarOpen
-                ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
-                : "right-4 w-96 max-w-md"
-              : sidebarOpen
+          className={`fixed z-30 pointer-events-auto transition-all ${pdfReaderOpen
+            ? sidebarOpen
               ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
               : "right-4 w-96 max-w-md"
-          } ${
-            answerText && summaryText
+            : sidebarOpen
+              ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+              : "right-4 w-96 max-w-md"
+            } ${answerText && summaryText
               ? "top-[calc(50%+30rem)] transform -translate-y-0"
               : answerText || summaryText
-              ? "top-[calc(50%+15rem)] transform -translate-y-0" 
-              : "top-1/2 transform -translate-y-1/2"
-          }`}
+                ? "top-[calc(50%+15rem)] transform -translate-y-0"
+                : "top-1/2 transform -translate-y-1/2"
+            }`}
         >
           <div className="bg-white rounded-xl shadow-2xl p-6 border-2 border-purple-200 max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between mb-3">
@@ -1342,21 +1388,19 @@ clearInterval(positionSaveIntervalRef.current);
       {/* Summary Display Box - Left Side */}
       {summaryText && (
         <div
-          className={`fixed z-30 pointer-events-auto transition-all ${
-            pdfReaderOpen
-              ? sidebarOpen
-                ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
-                : "right-4 w-96 max-w-md"
-              : sidebarOpen
+          className={`fixed z-30 pointer-events-auto transition-all ${pdfReaderOpen
+            ? sidebarOpen
               ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
               : "right-4 w-96 max-w-md"
-          } ${
-            answerText && analysisText
+            : sidebarOpen
+              ? "right-4 w-80 max-w-[calc(33.333%-2rem)]"
+              : "right-4 w-96 max-w-md"
+            } ${answerText && analysisText
               ? "top-[calc(50%+30rem)] transform -translate-y-0"
               : answerText || analysisText
-              ? "top-[calc(50%+15rem)] transform -translate-y-0"
-              : "top-1/2 transform -translate-y-1/2"
-          }`}
+                ? "top-[calc(50%+15rem)] transform -translate-y-0"
+                : "top-1/2 transform -translate-y-1/2"
+            }`}
         >
           <div className="bg-white rounded-xl shadow-2xl p-6 border-2 border-blue-200 max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between mb-3">
@@ -1490,9 +1534,8 @@ clearInterval(positionSaveIntervalRef.current);
           <button
             onClick={handlePlay}
             disabled={!selectedCourse || isPlaying || ttsLoading}
-            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${
-              isPlaying || ttsLoading ? "opacity-50" : ""
-            }`}
+            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${isPlaying || ttsLoading ? "opacity-50" : ""
+              }`}
             title={ttsLoading ? "Génération audio..." : "Lire"}
           >
             {ttsLoading ? (
@@ -1561,9 +1604,8 @@ clearInterval(positionSaveIntervalRef.current);
           <button
             onClick={() => setShowHistoryModal(true)}
             disabled={questionHistory.length === 0}
-            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${
-              questionHistory.length === 0 ? "opacity-50" : ""
-            }`}
+            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${questionHistory.length === 0 ? "opacity-50" : ""
+              }`}
             title="Historique des questions"
           >
             <svg
@@ -1586,9 +1628,8 @@ clearInterval(positionSaveIntervalRef.current);
           <button
             onClick={handleSummary}
             disabled={!selectedCourse || ttsLoading || summaryLoading}
-            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${
-              !selectedCourse || ttsLoading || summaryLoading ? "opacity-50" : ""
-            }`}
+            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${!selectedCourse || ttsLoading || summaryLoading ? "opacity-50" : ""
+              }`}
             title="Résumé"
           >
             {(ttsLoading || summaryLoading) ? (
@@ -1716,7 +1757,7 @@ clearInterval(positionSaveIntervalRef.current);
               if (isDocumentAudio && audioRef.current && pageTimings.length > 0 && pdfNumPages) {
                 const currentTime = audioRef.current.currentTime;
                 const targetPage = getPageForTime(currentTime);
-                
+
                 if (targetPage && targetPage !== pdfPageNumber && targetPage >= 1 && targetPage <= pdfNumPages) {
                   setPdfPageNumber(targetPage);
                 }
@@ -1725,7 +1766,7 @@ clearInterval(positionSaveIntervalRef.current);
             onEnded={() => {
               setIsPlaying(false);
               setIsPaused(false);
-              
+
               // If document audio ended, save position (should be at end)
               if (selectedCourse?.id && isDocumentAudio) {
                 savePosition(selectedCourse.id, audioRef.current.duration || 0);
@@ -1739,7 +1780,7 @@ clearInterval(positionSaveIntervalRef.current);
                 // The position was already saved when answer started playing
                 // User can click play again to resume document audio from saved position
               }
-              
+
               // Keep answer text visible even after audio ends
             }}
             onPlay={() => setIsPlaying(true)}
@@ -1841,13 +1882,12 @@ clearInterval(positionSaveIntervalRef.current);
                   }
                 }}
                 placeholder="Entrez votre question ici..."
-                className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none ${
-                  duplicateQuestion ? "border-yellow-500" : "border-gray-300"
-                }`}
+                className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none ${duplicateQuestion ? "border-yellow-500" : "border-gray-300"
+                  }`}
                 rows={4}
                 disabled={isRecording}
               />
-              
+
               {/* Auto-complete Suggestions */}
               {suggestions.length > 0 && questionText.trim() && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
@@ -1855,9 +1895,8 @@ clearInterval(positionSaveIntervalRef.current);
                     <div
                       key={suggestion.id}
                       onClick={() => selectSuggestion(suggestion)}
-                      className={`p-3 cursor-pointer hover:bg-pink-50 transition-colors ${
-                        index === selectedSuggestionIndex ? "bg-pink-100" : ""
-                      } ${index > 0 ? "border-t border-gray-200" : ""}`}
+                      className={`p-3 cursor-pointer hover:bg-pink-50 transition-colors ${index === selectedSuggestionIndex ? "bg-pink-100" : ""
+                        } ${index > 0 ? "border-t border-gray-200" : ""}`}
                     >
                       <p className="text-sm text-gray-800 font-medium">{suggestion.question}</p>
                       <p className="text-xs text-gray-500 mt-1 line-clamp-1">{suggestion.answer.substring(0, 60)}...</p>
@@ -1922,11 +1961,10 @@ clearInterval(positionSaveIntervalRef.current);
               {/* Record Audio Button */}
               <button
                 onClick={isRecording ? stopRecording : startRecording}
-                className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  isRecording
-                    ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-gray-500 hover:bg-gray-600 text-white"
-                }`}
+                className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${isRecording
+                  ? "bg-red-500 hover:bg-red-600 text-white"
+                  : "bg-gray-500 hover:bg-gray-600 text-white"
+                  }`}
                 disabled={loading || message}
               >
                 {isRecording ? (
@@ -1959,11 +1997,10 @@ clearInterval(positionSaveIntervalRef.current);
               <button
                 onClick={handleSubmitQuestion}
                 disabled={(!questionText.trim() && !recordedAudio) || loading || message || ttsLoading}
-                className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  (!questionText.trim() && !recordedAudio) || loading || message || ttsLoading
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "bg-pink-500 hover:bg-pink-600 text-white"
-                }`}
+                className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${(!questionText.trim() && !recordedAudio) || loading || message || ttsLoading
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  : "bg-pink-500 hover:bg-pink-600 text-white"
+                  }`}
               >
                 {ttsLoading ? (
                   <>
@@ -2056,7 +2093,7 @@ clearInterval(positionSaveIntervalRef.current);
                           </span>
                         </div>
                         <p className="text-gray-700 mb-3 ml-7">{entry.question}</p>
-                        
+
                         <div className="flex items-center gap-2 mb-2 ml-7">
                           <svg
                             className="w-5 h-5 text-green-500"
@@ -2115,7 +2152,7 @@ clearInterval(positionSaveIntervalRef.current);
       >
         {/* Subtle glow effect */}
         <span className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-75 blur-xl group-hover:opacity-100 transition-opacity duration-300 -z-10"></span>
-        
+
         <svg
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
