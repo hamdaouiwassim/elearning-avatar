@@ -129,8 +129,10 @@ export const UI = ({
   const [duplicateQuestion, setDuplicateQuestion] = useState(null);
 
   // Page timing synchronization state
-  const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number}
+  const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number, duration: number, audioPath: string}
   const [hasPlayedOnce, setHasPlayedOnce] = useState(false); // Track if audio has been played for current document
+  const [currentPageAudio, setCurrentPageAudio] = useState(null); // Current page being played
+  const [isChapterComplete, setIsChapterComplete] = useState(false); // Track if all pages have been read
 
   // Chapters sidebar state
   const [chapters, setChapters] = useState([]);
@@ -192,6 +194,10 @@ export const UI = ({
         // Or: {timings: [...], pages: [...]}
         if (Array.isArray(data)) {
           setPageTimings(data);
+          // If we have page timings with audio, start with first page
+          if (data.length > 0 && data[0].audioPath && selectedCourse?.courseId && selectedCourse?.id) {
+            // Will be loaded when play is triggered
+          }
         } else if (data.timings && Array.isArray(data.timings)) {
           setPageTimings(data.timings);
         } else if (data.pages && Array.isArray(data.pages)) {
@@ -199,6 +205,8 @@ export const UI = ({
           const timings = data.pages.map((pageData, index) => ({
             page: pageData.page || index + 1,
             time: pageData.time || pageData.startTime || 0,
+            duration: pageData.duration,
+            audioPath: pageData.audioPath,
           }));
           setPageTimings(timings);
         }
@@ -209,23 +217,99 @@ export const UI = ({
     }
   }, []);
 
-  // Get the current PDF page based on audio time
-  const getPageForTime = (currentTime) => {
-    if (!pageTimings || pageTimings.length === 0) return null;
+  // Load audio for a specific page
+  const loadPageAudio = useCallback(async (pageNumber, courseId, chapterId) => {
+    if (!pageTimings || pageTimings.length === 0) {
+      console.warn("[Page Audio] No page timings available");
+      return false;
+    }
 
-    // Sort timings by time (should already be sorted, but just in case)
-    const sortedTimings = [...pageTimings].sort((a, b) => a.time - b.time);
+    const pageData = pageTimings.find(t => t.page === pageNumber);
+    if (!pageData) {
+      console.warn(`[Page Audio] No data found for page ${pageNumber}`);
+      return false;
+    }
 
-    // Find the appropriate page for current time
-    for (let i = sortedTimings.length - 1; i >= 0; i--) {
-      if (currentTime >= sortedTimings[i].time) {
-        return sortedTimings[i].page;
+    // Check if page has audio file (new approach with per-page audio)
+    if (pageData.audioPath || pageData.audioFile) {
+      try {
+        // Construct audio URL for the page
+        const audioUrl = chapterId && courseId
+          ? `${API_URL}/api/courses/${courseId}/chapters/${chapterId}/audio/${pageNumber}`
+          : null;
+
+        if (!audioUrl) {
+          console.warn(`[Page Audio] Cannot construct audio URL for page ${pageNumber}`);
+          return false;
+        }
+
+        // Load the audio
+        if (audioRef.current) {
+          audioRef.current.src = audioUrl;
+          audioRef.current.load();
+          setCurrentPageAudio(pageNumber);
+          
+          // Configure libsync for this page audio
+          // Wait for audio to be loaded before setting up libsync
+          audioRef.current.addEventListener('loadeddata', () => {
+            setIsDocumentAudio(true);
+            setAudioElement(audioRef.current);
+            setAudioId(`${chapterId}-page-${pageNumber}`);
+            console.log(`[Page Audio] Configured libsync for page ${pageNumber} with ID: ${chapterId}-page-${pageNumber}`);
+          }, { once: true });
+          
+          // Also set immediately in case loadeddata already fired
+          setIsDocumentAudio(true);
+          setAudioElement(audioRef.current);
+          setAudioId(`${chapterId}-page-${pageNumber}`);
+          console.log(`[Page Audio] Loaded audio for page ${pageNumber} with libsync ID: ${chapterId}-page-${pageNumber}`);
+          return true;
+        }
+      } catch (error) {
+        console.error(`[Page Audio] Error loading audio for page ${pageNumber}:`, error);
+        return false;
       }
     }
 
-    // If time is before first timing, return first page
-    return sortedTimings[0]?.page || 1;
-  };
+    return false;
+  }, [pageTimings, setAudioElement, setAudioId]);
+
+  // Move to next page and load its audio
+  const playNextPage = useCallback(async () => {
+    if (!currentPageAudio || !pdfNumPages) return;
+
+    const nextPage = currentPageAudio + 1;
+    if (nextPage > pdfNumPages) {
+      // Reached the end - all pages have been read
+      setIsPlaying(false);
+      setIsPaused(false);
+      setCurrentPageAudio(null);
+      setIsChapterComplete(true); // Mark chapter as complete
+      return;
+    }
+
+    // Change slide to next page
+    if (setPdfPageNumber) {
+      setPdfPageNumber(nextPage);
+    }
+
+    // Load and play audio for next page
+    const courseId = selectedCourse?.courseId;
+    const chapterId = selectedCourse?.id;
+    
+    if (courseId && chapterId) {
+      const loaded = await loadPageAudio(nextPage, courseId, chapterId);
+      if (loaded && audioRef.current) {
+        try {
+          await audioRef.current.play();
+          setIsPlaying(true);
+          setIsPaused(false);
+        } catch (error) {
+          console.error(`[Page Audio] Error playing page ${nextPage}:`, error);
+        }
+      }
+    }
+  }, [currentPageAudio, pdfNumPages, setPdfPageNumber, selectedCourse, loadPageAudio]);
 
   // Fetch chapters for sidebar
   useEffect(() => {
@@ -272,7 +356,9 @@ export const UI = ({
       setQuestionHistory([]); // Clear question history when document changes
       setAnswerText(null); // Clear answer text when document changes
       setPageTimings([]); // Reset page timings
+      setCurrentPageAudio(null); // Reset current page audio
       setHasPlayedOnce(false); // Reset play flag for new document
+      setIsChapterComplete(false); // Reset chapter completion status
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
@@ -298,6 +384,28 @@ export const UI = ({
   const handlePlay = async () => {
     if (!selectedCourse || !selectedCourse.id) {
       alert("Aucun document sélectionné");
+      return;
+    }
+
+    // If chapter is complete, replay from the beginning
+    if (isChapterComplete) {
+      setIsChapterComplete(false);
+      setCurrentPageAudio(null);
+      if (setPdfPageNumber) {
+        setPdfPageNumber(1);
+      }
+      // Start playing from first page
+      const courseId = selectedCourse?.courseId;
+      const chapterId = selectedCourse?.id;
+      if (courseId && chapterId && pageTimings.length > 0) {
+        const loaded = await loadPageAudio(1, courseId, chapterId);
+        if (loaded && audioRef.current) {
+          // loadPageAudio already configures libsync (setAudioElement and setAudioId)
+          await audioRef.current.play();
+          setIsPlaying(true);
+          setIsPaused(false);
+        }
+      }
       return;
     }
 
@@ -336,16 +444,30 @@ export const UI = ({
 
       setIsDocumentAudio(true);
 
-      // Sync initial page when starting playback
-      if (audioRef.current && pageTimings.length > 0 && pdfNumPages) {
-        const currentTime = audioRef.current.currentTime;
-        const targetPage = getPageForTime(currentTime);
-        if (targetPage && targetPage >= 1 && targetPage <= pdfNumPages) {
-          setPdfPageNumber(targetPage);
-        }
-      }
+      // For page-based audio: load first page audio if available
+      const courseId = selectedCourse?.courseId;
+      const chapterId = selectedCourse?.id;
+      const hasPageAudio = pageTimings.length > 0 && pageTimings[0]?.audioPath;
 
-      audioRef.current.play();
+      if (hasPageAudio && courseId && chapterId) {
+        // Use new page-based audio approach
+        const firstPage = 1;
+        setIsChapterComplete(false); // Reset completion status when starting to play
+        if (setPdfPageNumber) {
+          setPdfPageNumber(firstPage);
+        }
+        const loaded = await loadPageAudio(firstPage, courseId, chapterId);
+        if (loaded && audioRef.current) {
+          await audioRef.current.play();
+        } else {
+          // Fallback to old approach if page audio loading fails
+          await audioRef.current.play();
+        }
+      } else {
+        // Fallback to old single-audio approach
+        setIsChapterComplete(false); // Reset completion status when starting to play
+        await audioRef.current.play();
+      }
       setIsPlaying(true);
       setIsPaused(false);
 
@@ -446,16 +568,28 @@ export const UI = ({
 
         setIsDocumentAudio(true);
 
-        // Sync initial page when starting playback
-        if (audioRef.current && pageTimings.length > 0 && pdfNumPages) {
-          const currentTime = audioRef.current.currentTime;
-          const targetPage = getPageForTime(currentTime);
-          if (targetPage && targetPage >= 1 && targetPage <= pdfNumPages) {
-            setPdfPageNumber(targetPage);
-          }
-        }
+        // For page-based audio: load first page audio if available
+        const courseId = selectedCourse?.courseId;
+        const chapterId = selectedCourse?.id;
+        const hasPageAudio = pageTimings.length > 0 && pageTimings[0]?.audioPath;
 
-        await audioRef.current.play();
+        if (hasPageAudio && courseId && chapterId) {
+          // Use new page-based audio approach
+          const firstPage = 1;
+          if (setPdfPageNumber) {
+            setPdfPageNumber(firstPage);
+          }
+          const loaded = await loadPageAudio(firstPage, courseId, chapterId);
+          if (loaded && audioRef.current) {
+            await audioRef.current.play();
+          } else {
+            // Fallback to old approach if page audio loading fails
+            await audioRef.current.play();
+          }
+        } else {
+          // Fallback to old single-audio approach
+          await audioRef.current.play();
+        }
         setIsPlaying(true);
         setIsPaused(false);
 
@@ -1464,22 +1598,28 @@ export const UI = ({
       <div className="fixed top-0 left-0 right-0 bottom-0 z-20 flex justify-between p-4 flex-col pointer-events-none">
         <div className="self-start backdrop-blur-md bg-white bg-opacity-50 p-4 rounded-lg">
           <div className="flex items-center justify-between gap-4">
-            {/* <div>
-              <h1 className="font-black text-xl">Titan Academy</h1>
-         
-              {selectedCourse && (
-                <div className="mt-1">
-                  <p className="text-sm text-gray-600 font-semibold">
-                    Apprentissage : {selectedCourse.courseName || selectedCourse.title}
-                  </p>
-                  {selectedCourse.courseDescription && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                      {selectedCourse.courseDescription}
+            <div className="flex items-center gap-2">
+              <img 
+                src="/logo.png" 
+                alt="Titan Academy Logo" 
+                className="h-8 w-auto"
+              />
+              <div>
+                <h1 className="font-black text-xl">Titan Academy</h1>
+                {selectedCourse && (
+                  <div className="mt-1">
+                    <p className="text-sm text-gray-600 font-semibold">
+                      Apprentissage : {selectedCourse.courseName || selectedCourse.title}
                     </p>
-                  )}
-                </div>
-              )}
-            </div> */}
+                    {selectedCourse.courseDescription && (
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                        {selectedCourse.courseDescription}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
               {selectedCourse?.hasStatements && onOpenLab && (
                 <button
@@ -1530,13 +1670,13 @@ export const UI = ({
         </div>
         {/* Main Avatar Control Buttons - Bottom Center */}
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-30 flex items-center justify-center gap-3 md:gap-4 pointer-events-auto">
-          {/* Play Button */}
+          {/* Play/Replay Button */}
           <button
             onClick={handlePlay}
-            disabled={!selectedCourse || isPlaying || ttsLoading}
-            className={`pointer-events-auto bg-pink-500 hover:bg-pink-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${isPlaying || ttsLoading ? "opacity-50" : ""
+            disabled={!selectedCourse || (isPlaying && !isChapterComplete) || ttsLoading}
+            className={`pointer-events-auto ${isChapterComplete ? 'bg-orange-500 hover:bg-orange-600' : 'bg-pink-500 hover:bg-pink-600'} disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 md:p-4 rounded-full transition-colors shadow-lg ${(isPlaying && !isChapterComplete) || ttsLoading ? "opacity-50" : ""
               }`}
-            title={ttsLoading ? "Génération audio..." : "Lire"}
+            title={ttsLoading ? "Génération audio..." : isChapterComplete ? "Rejouer le chapitre" : "Lire"}
           >
             {ttsLoading ? (
               <svg
@@ -1558,6 +1698,21 @@ export const UI = ({
                   fill="currentColor"
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 ></path>
+              </svg>
+            ) : isChapterComplete ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.023 9.348a4.5 4.5 0 010 7.196m-7.106-7.196a4.5 4.5 0 000 7.196m7.106 0L12 12.75m-4.5-4.5L12 3.75m0 0l4.5 4.5M12 3.75l-4.5 4.5M12 21a9 9 0 100-18 9 9 0 000 18z"
+                />
               </svg>
             ) : (
               <svg
@@ -1752,33 +1907,29 @@ export const UI = ({
           {/* Hidden audio element to control playback */}
           <audio
             ref={audioRef}
-            onTimeUpdate={() => {
-              // Synchronize PDF page with audio time (only for document audio)
-              if (isDocumentAudio && audioRef.current && pageTimings.length > 0 && pdfNumPages) {
-                const currentTime = audioRef.current.currentTime;
-                const targetPage = getPageForTime(currentTime);
-
-                if (targetPage && targetPage !== pdfPageNumber && targetPage >= 1 && targetPage <= pdfNumPages) {
-                  setPdfPageNumber(targetPage);
-                }
-              }
-            }}
             onEnded={() => {
-              setIsPlaying(false);
-              setIsPaused(false);
+              // For page-based audio: move to next page when current page audio ends
+              if (isDocumentAudio && currentPageAudio) {
+                // Play next page audio
+                playNextPage();
+              } else {
+                // Old approach: single audio file ended
+                setIsPlaying(false);
+                setIsPaused(false);
 
-              // If document audio ended, save position (should be at end)
-              if (selectedCourse?.id && isDocumentAudio) {
-                savePosition(selectedCourse.id, audioRef.current.duration || 0);
-                // Clear position save interval
-                if (positionSaveIntervalRef.current) {
-                  clearInterval(positionSaveIntervalRef.current);
-                  positionSaveIntervalRef.current = null;
-                }
-              } else if (!isDocumentAudio && selectedCourse?.id) {
-                // Answer audio finished - restore document audio if it was playing
+                // If document audio ended, save position (should be at end)
+                if (selectedCourse?.id && isDocumentAudio) {
+                  savePosition(selectedCourse.id, audioRef.current.duration || 0);
+                  // Clear position save interval
+                  if (positionSaveIntervalRef.current) {
+                    clearInterval(positionSaveIntervalRef.current);
+                    positionSaveIntervalRef.current = null;
+                  }
+                } else if (!isDocumentAudio && selectedCourse?.id) {
+                  // Answer audio finished - restore document audio if it was playing
                 // The position was already saved when answer started playing
                 // User can click play again to resume document audio from saved position
+                }
               }
 
               // Keep answer text visible even after audio ends

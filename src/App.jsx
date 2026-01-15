@@ -4,6 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import { Leva } from "leva";
 import { Home } from "./components/Home";
 import { Login } from "./components/Login";
+import { LandingPage } from "./components/LandingPage";
 import { ChapterSelection } from "./components/ChapterSelection";
 import { CapabilityError } from "./components/CapabilityError";
 import { OldBrowserError } from "./components/OldBrowserError";
@@ -239,7 +240,7 @@ function App() {
   }
 
   if (!authenticated) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return <LandingPage onLoginSuccess={handleLoginSuccess} />;
   }
 
   // Show capability error if requirements not met

@@ -14,11 +14,67 @@ const Avatar = lazy(() => import("./Avatar").then(module => ({ default: module.A
 
 // Component to track avatar's screen position
 const AvatarScreenPositionTracker = ({ avatarGroup, setScreenPosition, camera }) => {
+  const lastPositionRef = useRef({ x: null, y: null, z: null, rotationY: null });
+  const frameCountRef = useRef(0);
+  
   useFrame(() => {
     if (!avatarGroup.current || !camera) return;
 
     // Update the group's world matrix
     avatarGroup.current.updateWorldMatrix(true, false);
+
+    // Get avatar's world position
+    const worldPosition = new THREE.Vector3();
+    avatarGroup.current.getWorldPosition(worldPosition);
+
+    // Get avatar's rotation (in radians)
+    const rotation = new THREE.Euler();
+    rotation.setFromRotationMatrix(avatarGroup.current.matrixWorld);
+    const rotationY = rotation.y;
+
+    // Log position and rotation - throttle to every 3 frames for more responsive logging
+    frameCountRef.current++;
+    if (frameCountRef.current % 3 === 0) {
+      const currentPos = { 
+        x: worldPosition.x, 
+        y: worldPosition.y, 
+        z: worldPosition.z,
+        rotationY: rotationY
+      };
+      const lastPos = lastPositionRef.current;
+      
+      // Log if position or rotation changed, or if it's the first time
+      // Use very small thresholds to catch any movement
+      const threshold = 0.00001; // Very sensitive threshold
+      const rotationThreshold = 0.0001; // Very sensitive for rotation
+      
+      // Always log on first frame, then only on changes
+      const hasChanged = lastPos.x === null || 
+        Math.abs(currentPos.x - lastPos.x) > threshold ||
+        Math.abs(currentPos.y - lastPos.y) > threshold ||
+        Math.abs(currentPos.z - lastPos.z) > threshold ||
+        (lastPos.rotationY !== null && Math.abs(currentPos.rotationY - lastPos.rotationY) > rotationThreshold);
+      
+      if (hasChanged) {
+        console.log('Avatar Position & Rotation:', {
+          position: {
+            x: currentPos.x.toFixed(4),
+            y: currentPos.y.toFixed(4),
+            z: currentPos.z.toFixed(4)
+          },
+          rotation: {
+            y: currentPos.rotationY.toFixed(4),
+            yDegrees: (currentPos.rotationY * 180 / Math.PI).toFixed(2) + '°'
+          },
+          localPosition: {
+            x: avatarGroup.current.position.x.toFixed(4),
+            y: avatarGroup.current.position.y.toFixed(4),
+            z: avatarGroup.current.position.z.toFixed(4)
+          }
+        });
+        lastPositionRef.current = currentPos;
+      }
+    }
 
     // Get avatar's head position in local space (approximately at y=1.8, above the body)
     const headPositionLocal = new THREE.Vector3(0, 1.8, 0);
@@ -39,6 +95,44 @@ const AvatarScreenPositionTracker = ({ avatarGroup, setScreenPosition, camera })
     setScreenPosition({ x, y });
   });
 
+  return null;
+};
+
+// Component to track camera position when moved with mouse
+const CameraPositionTracker = ({ camera }) => {
+  const lastPosRef = useRef({ x: null, y: null, z: null });
+  const frameCountRef = useRef(0);
+  
+  useFrame(() => {
+    if (!camera) return;
+    
+    frameCountRef.current++;
+    // Check every 5 frames
+    if (frameCountRef.current % 5 === 0) {
+      const currentPos = {
+        x: camera.position.x,
+        y: camera.position.y,
+        z: camera.position.z
+      };
+      const lastPos = lastPosRef.current;
+      const threshold = 0.001;
+      
+      if (
+        lastPos.x === null ||
+        Math.abs(currentPos.x - lastPos.x) > threshold ||
+        Math.abs(currentPos.y - lastPos.y) > threshold ||
+        Math.abs(currentPos.z - lastPos.z) > threshold
+      ) {
+        console.log('Camera Position:', {
+          x: currentPos.x.toFixed(3),
+          y: currentPos.y.toFixed(3),
+          z: currentPos.z.toFixed(3)
+        });
+        lastPosRef.current = currentPos;
+      }
+    }
+  });
+  
   return null;
 };
 
@@ -76,18 +170,20 @@ export const Experience = () => {
   const { cameraZoomed, avatarPosition, audioElement, setAvatarScreenPosition } = useChat();
   const { camera, size } = useThree();
   const avatarGroupRef = useRef(null);
+  const lastCameraPositionRef = useRef({ x: null, y: null, z: null });
+  const cameraFrameCountRef = useRef(0);
 
   useEffect(() => {
     cameraControls.current.setLookAt(0, 2, 5, 0, 1.5, 0);
   }, []);
 
   useEffect(() => {
-    const xOffset = avatarPosition === "right" ? -4.5 : avatarPosition === "left" ? 4.5 : 0;
+    const xOffset = avatarPosition === "right" ? -4.5 : avatarPosition === "left" ? 4.5 : 0.6; // Décalage caméra pour suivre l'avatar
     const baseX = 0;
     const baseY = cameraZoomed ? 1.5 : 2.2;
     const baseZ = cameraZoomed ? 1.5 : 5;
     const targetX =
-      avatarPosition === "right" ? -2.5 : avatarPosition === "left" ? 2.5 : baseX;
+      avatarPosition === "right" ? -2.5 : avatarPosition === "left" ? 2.5 : 1.5; // Cible vers la nouvelle position de l'avatar
     const targetY = cameraZoomed ? 1.5 : 1.0;
     const targetZ = 0;
 
@@ -103,7 +199,7 @@ export const Experience = () => {
   }, [cameraZoomed, avatarPosition]);
 
   const avatarXPosition =
-    avatarPosition === "right" ? -2.5 : avatarPosition === "left" ? 2.5 : 0;
+    avatarPosition === "right" ? -2.5 : avatarPosition === "left" ? 2.5 : 1.5; // Décalé plus à droite sur l'écran
 
   return (
     <>
@@ -115,8 +211,8 @@ export const Experience = () => {
       </Suspense>
       <group
         ref={avatarGroupRef}
-        rotation-y={avatarPosition === "right" ? Math.PI : 0}
-        position={[avatarXPosition, 0, 0]}
+        rotation-y={avatarPosition === "right" ? Math.PI : avatarPosition === "left" ? 0 : -0.5} // Regarde un peu plus à droite quand au centre (-28.65°)
+        position={[avatarXPosition, 0, 0]} // Position: x: 1.5000, y: 0.0000, z: 0.0000
       >
         <Suspense fallback={
           <mesh>

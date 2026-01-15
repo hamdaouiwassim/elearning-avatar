@@ -164,10 +164,16 @@ export const Home = ({ onStartLearning }) => {
         <div className="text-center md:text-left mb-12">
           <div className="flex flex-col gap-6">
             <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-5xl font-black text-gray-800 mb-4">
-                  Titan Academy
-                </h1>
+              <div className="flex items-center gap-4">
+                <img 
+                  src="/logo.png" 
+                  alt="Titan Academy Logo" 
+                  className="h-16 w-auto"
+                />
+                <div>
+                  <h1 className="text-5xl font-black text-gray-800 mb-4">
+                    Titan Academy
+                  </h1>
                 <p className="text-xl text-gray-600">
                   Choisissez un document et commencez à apprendre avec votre assistant virtuel
                 </p>
@@ -176,6 +182,7 @@ export const Home = ({ onStartLearning }) => {
                     Connecté en tant que: <span className="font-semibold text-indigo-600">{userEmail}</span>
                   </p>
                 )}
+                </div>
               </div>
               {userEmail && (
                 <div className="relative logout-container">

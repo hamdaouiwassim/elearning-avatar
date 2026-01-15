@@ -190,10 +190,16 @@ export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) =
         {/* Header Section */}
         <div className="p-2 md:p-0">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-pink-600">
-                Titan Academy • Laboratoire
-              </p>
+            <div className="flex items-center gap-3">
+              <img 
+                src="/logo.png" 
+                alt="Titan Academy Logo" 
+                className="h-10 w-auto"
+              />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-pink-600">
+                  Titan Academy • Laboratoire
+                </p>
               <h1 className="mt-2 text-3xl font-black text-gray-800 lg:text-5xl">
                 {lab?.labName || course?.courseName || "Espace d'entraînement"}
               </h1>
@@ -202,6 +208,7 @@ export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) =
                   Type: <span className="font-semibold">{lab.labType}</span>
                 </p>
               )}
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-3">

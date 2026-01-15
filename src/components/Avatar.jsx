@@ -415,22 +415,59 @@ export function Avatar(props) {
     }
 
     const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
-    const libsyncUrl = `${API_URL}/audios/${audioId}.json`;
-
-    fetch(libsyncUrl)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to load libsync: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
-        setLipsync(data);
-      })
-      .catch((error) => {
-        console.warn("Failed to load libsync JSON:", error);
-        setLipsync(null);
-      });
+    
+    // Check if audioId is for a page-based audio (format: chapterId-page-pageNumber)
+    const isPageAudio = audioId.includes('-page-');
+    let libsyncUrl;
+    
+    if (isPageAudio) {
+      // For page-based audio, try to load page-specific libsync first
+      // If not found, fallback to chapter libsync
+      const [chapterId] = audioId.split('-page-');
+      libsyncUrl = `${API_URL}/audios/${audioId}.json`;
+      const chapterLibsyncUrl = `${API_URL}/audios/${chapterId}.json`;
+      
+      // Try page-specific libsync first
+      fetch(libsyncUrl)
+        .then((response) => {
+          if (response.ok) {
+            return response.json();
+          }
+          // If page libsync doesn't exist, try chapter libsync
+          console.log(`[Libsync] Page libsync not found for ${audioId}, trying chapter libsync...`);
+          return fetch(chapterLibsyncUrl).then(res => {
+            if (!res.ok) {
+              throw new Error(`Failed to load libsync: ${res.status}`);
+            }
+            return res.json();
+          });
+        })
+        .then((data) => {
+          setLipsync(data);
+        })
+        .catch((error) => {
+          console.warn(`[Libsync] Failed to load libsync JSON for ${audioId}:`, error.message);
+          setLipsync(null);
+        });
+    } else {
+      // For regular audio, use the standard path
+      libsyncUrl = `${API_URL}/audios/${audioId}.json`;
+      
+      fetch(libsyncUrl)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load libsync: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then((data) => {
+          setLipsync(data);
+        })
+        .catch((error) => {
+          console.warn(`[Libsync] Failed to load libsync JSON for ${audioId}:`, error.message);
+          setLipsync(null);
+        });
+    }
   }, [audioId]);
 
   useFrame(() => {
