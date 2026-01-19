@@ -198,7 +198,7 @@ const LearningPage = ({ authenticated }) => {
           <UI
             pdfReaderOpen={true}
             selectedCourse={selectedChapter}
-            onBackToHome={() => navigate("/")}
+            onBackToHome={() => navigate(`/courses/${courseId}/chapters`)}
             onSelectChapter={handleSelectChapter}
             pdfPageNumber={pdfPageNumber}
             setPdfPageNumber={setPdfPageNumber}

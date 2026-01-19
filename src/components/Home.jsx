@@ -375,16 +375,6 @@ export const Home = ({ onStartLearning }) => {
                         }`
                       : "Aucune description disponible"}
                   </p>
-                  {course.courseDescription && course.courseDescription.length > 0 && (
-                    <div className="mb-4 text-sm text-gray-500">
-                      <span className="font-semibold text-gray-700">
-                        Aperçu :
-                      </span>{" "}
-                      {course.courseDescription.length > 220
-                        ? `${course.courseDescription.substring(0, 220)}...`
-                        : course.courseDescription}
-                    </div>
-                  )}
                   {/* Enrollment Status */}
                   {course.isEnrolled && (
                     <div className="mb-4">

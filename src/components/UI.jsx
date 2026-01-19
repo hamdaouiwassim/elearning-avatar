@@ -1672,17 +1672,17 @@ export const UI = ({
                 className="h-8 w-auto"
               />
               <div>
-                <h1 className="font-black text-xl">Titan Academy</h1>
+                
                 {selectedCourse && (
                   <div className="mt-1">
                     <p className="text-sm text-gray-600 font-semibold">
                       Apprentissage : {selectedCourse.courseName || selectedCourse.title}
                     </p>
-                    {selectedCourse.courseDescription && (
+                    {/* {selectedCourse.courseDescription && (
                       <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                         {selectedCourse.courseDescription}
                       </p>
-                    )}
+                    )} */}
                   </div>
                 )}
               </div>
@@ -1714,7 +1714,7 @@ export const UI = ({
                 <button
                   onClick={onBackToHome}
                   className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md transition-colors flex items-center gap-2"
-                  title="Retour à l'accueil"
+                  title="Retour aux chapitres"
                 >
                   <svg
                     className="w-5 h-5"
@@ -1729,7 +1729,7 @@ export const UI = ({
                       d="M10 19l-7-7m0 0l7-7m-7 7h18"
                     />
                   </svg>
-                  <span>Accueil</span>
+                  <span>Retour</span>
                 </button>
               )}
             </div>

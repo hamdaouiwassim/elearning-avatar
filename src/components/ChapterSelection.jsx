@@ -265,11 +265,6 @@ export const ChapterSelection = ({ course, onSelectChapter, onBackToHome }) => {
                 <p className="text-lg md:text-xl text-gray-600">
                   Choisissez un chapitre pour commencer l'apprentissage
                 </p>
-                {course.courseDescription && (
-                  <p className="text-base md:text-lg text-gray-500 mt-2">
-                    {course.courseDescription}
-                  </p>
-                )}
               </div>
             </div>
           </div>
