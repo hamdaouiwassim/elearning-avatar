@@ -19,6 +19,7 @@ import 'whatwg-fetch';
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { ChatProvider } from "./hooks/useChat";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -46,9 +47,11 @@ if (checkOldBrowser()) {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>
       <ErrorBoundary componentName="Application">
-        <ChatProvider>
-          <App />
-        </ChatProvider>
+        <BrowserRouter>
+          <ChatProvider>
+            <App />
+          </ChatProvider>
+        </BrowserRouter>
       </ErrorBoundary>
     </React.StrictMode>
   );

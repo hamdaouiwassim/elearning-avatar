@@ -7,6 +7,7 @@ import { ExerciseSidebar } from "./ExerciseSidebar";
 import { Canvas } from "@react-three/fiber";
 import { Suspense } from "react";
 import { Avatar } from "./Avatar";
+import { Leva } from "leva";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
 
@@ -184,7 +185,9 @@ export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) =
 
   // 3. Main Interface (After Starting)
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200 px-3 py-6 lg:px-6 lg:py-10 overflow-x-hidden">
+    <>
+      <Leva hidden />
+      <div className="min-h-screen bg-gradient-to-br from-pink-200 via-purple-200 to-blue-200 px-3 py-6 lg:px-6 lg:py-10 overflow-x-hidden">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 lg:gap-8">
 
         {/* Header Section */}
@@ -288,5 +291,6 @@ export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) =
         className="hidden"
       />
     </div>
+    </>
   );
 };

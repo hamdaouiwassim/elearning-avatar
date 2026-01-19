@@ -9,6 +9,7 @@ export const UI = ({
   onBackToHome,
   onSelectChapter,
   onOpenLab,
+  onOpenFinalProject,
   pdfPageNumber,
   setPdfPageNumber,
   pdfScale,
@@ -139,6 +140,56 @@ export const UI = ({
   const [chaptersLoading, setChaptersLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true); // Sidebar open by default
   const [showLabButton, setShowLabButton] = useState(false); // State for lab button visibility
+
+  // Final project state
+  const [finalProject, setFinalProject] = useState(null);
+  const [checkingFinalProject, setCheckingFinalProject] = useState(false);
+  const [showFinalProjectView, setShowFinalProjectView] = useState(false);
+
+  // Check for final project
+  useEffect(() => {
+    const checkFinalProject = async () => {
+      console.log('[UI] Checking final project...', selectedCourse);
+      setCheckingFinalProject(true);
+      
+      if (!selectedCourse?.courseId) {
+        console.log('[UI] No courseId, skipping final project check');
+        setCheckingFinalProject(false);
+        setFinalProject(null);
+        return;
+      }
+
+      try {
+        const url = `${API_URL}/api/courses/${selectedCourse.courseId}/final-project`;
+        console.log('[UI] Fetching final project from:', url);
+        const response = await fetch(url, {
+          credentials: 'include'
+        });
+        console.log('[UI] Final project response status:', response.status);
+        
+        if (response.ok) {
+          const project = await response.json();
+          console.log('[UI] Loaded final project:', project);
+          console.log('[UI] Final project documents:', project.documents);
+          setFinalProject(project);
+        } else if (response.status === 404) {
+          // No final project exists yet
+          console.log('[UI] No final project found (404)');
+          setFinalProject(null);
+        } else {
+          console.error("[UI] Error checking final project:", response.status, response.statusText);
+          setFinalProject(null);
+        }
+      } catch (error) {
+        console.error("[UI] Error checking final project:", error);
+        setFinalProject(null);
+      } finally {
+        setCheckingFinalProject(false);
+      }
+    };
+
+    checkFinalProject();
+  }, [selectedCourse?.courseId]);
 
   // Check for labs with exercises
   useEffect(() => {
@@ -1363,6 +1414,22 @@ export const UI = ({
                 </button>
               </div>
             )}
+
+            {/* Final Project Button (Footer) */}
+            {finalProject && onOpenFinalProject && (
+              <div className="p-4 border-t border-gray-200 bg-gray-50">
+                <button
+                  onClick={() => onOpenFinalProject(selectedCourse, finalProject)}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white shadow-md py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all font-bold text-sm transform hover:scale-[1.02]"
+                  title="Voir le projet final"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Voir le Projet Final
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2320,6 +2387,126 @@ export const UI = ({
         </svg>
         <span className="hidden sm:inline font-bold">Demander</span>
       </button>
+
+      {/* Final Project View Modal */}
+      {showFinalProjectView && finalProject && selectedCourse && (
+        <FinalProjectViewModal
+          course={selectedCourse}
+          finalProject={finalProject}
+          onClose={() => {
+            setShowFinalProjectView(false);
+          }}
+        />
+      )}
     </>
+  );
+};
+
+// Modal pour visualiser le projet final et ses documents
+const FinalProjectViewModal = ({ course, finalProject, onClose }) => {
+  const [documents, setDocuments] = useState(finalProject?.documents || []);
+  const [loading, setLoading] = useState(false);
+  const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+
+  useEffect(() => {
+    // Load documents if not already loaded
+    if (finalProject && (!finalProject.documents || finalProject.documents.length === 0)) {
+      loadDocuments();
+    } else {
+      setDocuments(finalProject?.documents || []);
+    }
+  }, [finalProject]);
+
+  const loadDocuments = async () => {
+    if (!course?.courseId) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/courses/${course.courseId}/final-project`, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const project = await response.json();
+        setDocuments(project.documents || []);
+      }
+    } catch (err) {
+      console.error("[UI] Error loading documents:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getDocumentPdfUrl = (documentId) => {
+    return `${API_URL}/api/courses/${course.courseId}/final-project/documents/${documentId}/pdf`;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-2xl font-semibold text-gray-800">{finalProject?.projectName || 'Projet Final'}</h3>
+            {finalProject?.projectDescription && (
+              <p className="text-sm text-gray-600 mt-1">{finalProject.projectDescription}</p>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-2xl"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div className="p-6">
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+              <p className="text-gray-600">Chargement des documents...</p>
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="text-center py-12">
+              <i className="fas fa-file-pdf text-6xl text-gray-300 mb-4"></i>
+              <p className="text-gray-500 text-lg">Aucun document disponible</p>
+              <p className="text-gray-400 text-sm mt-2">Les documents seront affichés ici une fois ajoutés</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                Documents ({documents.length})
+              </h4>
+              {documents.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h5 className="font-semibold text-gray-800 mb-1">{doc.documentName}</h5>
+                      {doc.documentDescription && (
+                        <p className="text-sm text-gray-600 mb-3">{doc.documentDescription}</p>
+                      )}
+                      <a
+                        href={getDocumentPdfUrl(doc.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+                      >
+                        <i className="fas fa-file-pdf"></i>
+                        <span>Voir le PDF</span>
+                        <i className="fas fa-external-link-alt text-xs"></i>
+                      </a>
+                    </div>
+                    <div className="ml-4">
+                      <i className="fas fa-file-pdf text-3xl text-red-500"></i>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
