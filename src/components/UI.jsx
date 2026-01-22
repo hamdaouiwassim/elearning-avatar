@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useChat } from "../hooks/useChat";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
@@ -16,7 +17,8 @@ export const UI = ({
   setPdfScale,
   pdfNumPages,
 }) => {
-  const { chat, loading, cameraZoomed, setCameraZoomed, message, avatarPosition, setAvatarPosition, setAudioElement, setAudioId, audioElement, avatarScreenPosition } = useChat();
+  const navigate = useNavigate();
+  const { chat, loading, cameraZoomed, setCameraZoomed, message, avatarPosition, setAvatarPosition, setAudioElement, setAudioId, setLipSyncUrl, audioElement, avatarScreenPosition } = useChat();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -70,7 +72,7 @@ export const UI = ({
   }, [isDocumentAudio]);
 
   const handleAvatarAudioPlayback = useCallback(
-    async ({ audioUrl, audioId }) => {
+    async ({ audioUrl, audioId, lipSyncUrl }) => {
       if (!audioUrl || !audioRef.current) {
         return false;
       }
@@ -89,6 +91,7 @@ export const UI = ({
         setIsDocumentAudio(false);
         setAudioElement(audioRef.current);
         setAudioId(audioId || null);
+        setLipSyncUrl(lipSyncUrl ?? null);
         await audioRef.current.play();
         setIsPlaying(true);
         setIsPaused(false);
@@ -98,7 +101,7 @@ export const UI = ({
         return false;
       }
     },
-    [selectedCourse?.id, isDocumentAudio, setAudioElement, setAudioId, savePosition]
+    [selectedCourse?.id, isDocumentAudio, setAudioElement, setAudioId, setLipSyncUrl, savePosition]
   );
 
   // Answer display state
@@ -145,6 +148,7 @@ export const UI = ({
   const [finalProject, setFinalProject] = useState(null);
   const [checkingFinalProject, setCheckingFinalProject] = useState(false);
   const [showFinalProjectView, setShowFinalProjectView] = useState(false);
+
 
   // Check for final project
   useEffect(() => {
@@ -299,20 +303,21 @@ export const UI = ({
           audioRef.current.src = audioUrl;
           audioRef.current.load();
           setCurrentPageAudio(pageNumber);
-          
+          const pageLipSyncUrl = `/api/courses/${courseId}/chapters/${chapterId}/lip-sync/${pageNumber}`;
           // Configure libsync for this page audio
           // Wait for audio to be loaded before setting up libsync
           audioRef.current.addEventListener('loadeddata', () => {
             setIsDocumentAudio(true);
             setAudioElement(audioRef.current);
             setAudioId(`${chapterId}-page-${pageNumber}`);
+            setLipSyncUrl(pageLipSyncUrl);
             console.log(`[Page Audio] Configured libsync for page ${pageNumber} with ID: ${chapterId}-page-${pageNumber}`);
           }, { once: true });
-          
           // Also set immediately in case loadeddata already fired
           setIsDocumentAudio(true);
           setAudioElement(audioRef.current);
           setAudioId(`${chapterId}-page-${pageNumber}`);
+          setLipSyncUrl(pageLipSyncUrl);
           console.log(`[Page Audio] Loaded audio for page ${pageNumber} with libsync ID: ${chapterId}-page-${pageNumber}`);
           return true;
         }
@@ -323,7 +328,7 @@ export const UI = ({
     }
 
     return false;
-  }, [pageTimings, setAudioElement, setAudioId]);
+  }, [pageTimings, setAudioElement, setAudioId, setLipSyncUrl]);
 
   // Move to next page and load its audio
   const playNextPage = useCallback(async () => {
@@ -417,6 +422,7 @@ export const UI = ({
       // Clear audio context for Avatar
       setAudioElement(null);
       setAudioId(null);
+      setLipSyncUrl(null);
       // Clear position save interval
       if (positionSaveIntervalRef.current) {
         clearInterval(positionSaveIntervalRef.current);
@@ -430,7 +436,7 @@ export const UI = ({
         fetchPageTimings(selectedCourse.id, selectedCourse.courseId);
       }
     }
-  }, [selectedCourse?.id, selectedCourse?.courseId, fetchPageTimings, setAudioElement, setAudioId]);
+  }, [selectedCourse?.id, selectedCourse?.courseId, fetchPageTimings, setAudioElement, setAudioId, setLipSyncUrl]);
 
   const handlePlay = async () => {
     if (!selectedCourse || !selectedCourse.id) {
@@ -476,6 +482,9 @@ export const UI = ({
       // Set audio element and ID in context for Avatar libsync
       setAudioElement(audioRef.current);
       setAudioId(selectedCourse.id);
+      const courseId = selectedCourse?.courseId;
+      const chapterId = selectedCourse?.id;
+      setLipSyncUrl(courseId && chapterId ? `/api/courses/${courseId}/chapters/${chapterId}/lip-sync` : null);
 
       // On first play after document load, start from beginning; otherwise resume from saved position
       if (!hasPlayedOnce) {
@@ -496,8 +505,6 @@ export const UI = ({
       setIsDocumentAudio(true);
 
       // For page-based audio: load first page audio if available
-      const courseId = selectedCourse?.courseId;
-      const chapterId = selectedCourse?.id;
       const hasPageAudio = pageTimings.length > 0 && pageTimings[0]?.audioPath;
 
       if (hasPageAudio && courseId && chapterId) {
@@ -600,6 +607,9 @@ export const UI = ({
         // Set audio element and ID in context for Avatar libsync
         setAudioElement(audioRef.current);
         setAudioId(audioId);
+        const courseId = selectedCourse?.courseId;
+        const chapterId = selectedCourse?.id;
+        setLipSyncUrl(courseId && chapterId ? `/api/courses/${courseId}/chapters/${chapterId}/lip-sync` : null);
 
         // On first play after document load, start from beginning; otherwise resume from saved position
         if (!hasPlayedOnce) {
@@ -620,8 +630,6 @@ export const UI = ({
         setIsDocumentAudio(true);
 
         // For page-based audio: load first page audio if available
-        const courseId = selectedCourse?.courseId;
-        const chapterId = selectedCourse?.id;
         const hasPageAudio = pageTimings.length > 0 && pageTimings[0]?.audioPath;
 
         if (hasPageAudio && courseId && chapterId) {
@@ -896,6 +904,7 @@ export const UI = ({
   };
 
   const handleAskQuestion = () => {
+    handlePause();
     setShowQuestionModal(true);
     setQuestionText("");
     setRecordedAudio(null);
@@ -1411,6 +1420,22 @@ export const UI = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                   </svg>
                   Accéder au Labo
+                </button>
+              </div>
+            )}
+
+            {/* Quiz Button (Footer) */}
+            {selectedCourse?.id && selectedCourse?.courseId && (
+              <div className="p-4 border-t border-gray-200 bg-gray-50">
+                <button
+                  onClick={() => navigate(`/courses/${selectedCourse.courseId}/chapters/${selectedCourse.id}/quiz`)}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white shadow-md py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all font-bold text-sm transform hover:scale-[1.02]"
+                  title="Passer le quiz du chapitre"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  Passer le Quiz
                 </button>
               </div>
             )}
@@ -2398,6 +2423,7 @@ export const UI = ({
           }}
         />
       )}
+
     </>
   );
 };

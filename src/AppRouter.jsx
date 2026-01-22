@@ -14,6 +14,7 @@ import { isAndroid } from "./utils/deviceDetector";
 import { checkAuthStatus, isAuthenticated } from "./utils/auth";
 import { CourseLabs } from "./components/CourseLabs";
 import { FinalProjectPage } from "./components/FinalProjectPage";
+import { QuizPage } from "./components/QuizPage";
 
 // Lazy load heavy components for better TV performance with retry logic
 const Experience = lazyWithRetry(() => import("./components/Experience").then(module => ({ default: module.Experience })));
@@ -164,11 +165,11 @@ const LearningPage = ({ authenticated }) => {
             dpr={[1, 2]}
             performance={{ min: 0.5 }}
             style={{
-              width: "100%",
+              width: "50%",
               height: "100%",
               position: "fixed",
               top: 0,
-              left: 0,
+              right: 0,
               zIndex: 10,
             }}
             gl={{
@@ -634,6 +635,12 @@ export const AppRouter = ({ authenticated, authChecking, capabilityCheckDone, ca
       <Route path="/courses/:courseId/final-project" element={
         <ProtectedRoute authenticated={authenticated}>
           <FinalProjectRoute authenticated={authenticated} />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/courses/:courseId/chapters/:chapterId/quiz" element={
+        <ProtectedRoute authenticated={authenticated}>
+          <QuizPage />
         </ProtectedRoute>
       } />
 

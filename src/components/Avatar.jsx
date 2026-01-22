@@ -111,7 +111,7 @@ export function Avatar(props) {
   const gltf = useGLTF("/models/64f1a714fe61576b46f27ca2.glb");
   const { nodes, materials, scene } = gltf;
 
-  const { message, onMessagePlayed, chat, audioElement, audioId } = useChat();
+  const { message, onMessagePlayed, chat, audioElement, audioId, lipSyncUrl } = useChat();
   const { camera } = useThree();
 
   const [lipsync, setLipsync] = useState(null);
@@ -407,68 +407,70 @@ export function Avatar(props) {
   const [facialExpression, setFacialExpression] = useState("");
   const [audio, setAudio] = useState(null);
 
-  // Load libsync JSON file when audioId changes
+  // Load lip-sync JSON when audioId or lipSyncUrl changes
   useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+
+    if (!audioId && !lipSyncUrl) {
+      setLipsync(null);
+      return;
+    }
+
+    // Prefer explicit lipSyncUrl (quiz, chapter API) over /audios/ paths
+    // API routes require auth: send credentials so session cookie is included
+    const fetchOpts = { credentials: "include" };
+
+    if (lipSyncUrl) {
+      const url = lipSyncUrl.startsWith("http") ? lipSyncUrl : `${API_URL}${lipSyncUrl}`;
+      fetch(url, fetchOpts)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Lip sync: ${res.status}`);
+          const ct = res.headers.get("content-type") || "";
+          if (!ct.includes("application/json")) {
+            throw new Error("Response is not JSON");
+          }
+          return res.json();
+        })
+        .then((data) => setLipsync(data))
+        .catch((err) => {
+          console.warn("[Libsync] Failed to load lip sync:", err.message);
+          setLipsync(null);
+        });
+      return;
+    }
+
     if (!audioId) {
       setLipsync(null);
       return;
     }
 
-    const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
-    
-    // Check if audioId is for a page-based audio (format: chapterId-page-pageNumber)
-    const isPageAudio = audioId.includes('-page-');
-    let libsyncUrl;
-    
+    // Fallback: build URL from audioId (doc, lab, legacy) — /audios/ is static
+    const isPageAudio = audioId.includes("-page-");
     if (isPageAudio) {
-      // For page-based audio, try to load page-specific libsync first
-      // If not found, fallback to chapter libsync
-      const [chapterId] = audioId.split('-page-');
-      libsyncUrl = `${API_URL}/audios/${audioId}.json`;
-      const chapterLibsyncUrl = `${API_URL}/audios/${chapterId}.json`;
-      
-      // Try page-specific libsync first
-      fetch(libsyncUrl)
-        .then((response) => {
-          if (response.ok) {
-            return response.json();
-          }
-          // If page libsync doesn't exist, try chapter libsync
-          console.log(`[Libsync] Page libsync not found for ${audioId}, trying chapter libsync...`);
-          return fetch(chapterLibsyncUrl).then(res => {
-            if (!res.ok) {
-              throw new Error(`Failed to load libsync: ${res.status}`);
-            }
-            return res.json();
-          });
-        })
-        .then((data) => {
-          setLipsync(data);
-        })
-        .catch((error) => {
-          console.warn(`[Libsync] Failed to load libsync JSON for ${audioId}:`, error.message);
+      const [chapterId] = audioId.split("-page-");
+      const pageUrl = `${API_URL}/audios/${audioId}.json`;
+      const chapterUrl = `${API_URL}/audios/${chapterId}.json`;
+      const fetchOne = (u) => fetch(u, fetchOpts).then((r) => (r.ok ? r.json() : Promise.reject(new Error("Not found"))));
+      fetchOne(pageUrl)
+        .then((data) => setLipsync(data))
+        .catch(() => fetchOne(chapterUrl).then((data) => setLipsync(data)))
+        .catch((err) => {
+          console.warn(`[Libsync] Page/chapter lip sync failed for ${audioId}:`, err.message);
           setLipsync(null);
         });
     } else {
-      // For regular audio, use the standard path
-      libsyncUrl = `${API_URL}/audios/${audioId}.json`;
-      
-      fetch(libsyncUrl)
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Failed to load libsync: ${response.status}`);
-          }
-          return response.json();
+      fetch(`${API_URL}/audios/${audioId}.json`, fetchOpts)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Lip sync: ${res.status}`);
+          return res.json();
         })
-        .then((data) => {
-          setLipsync(data);
-        })
-        .catch((error) => {
-          console.warn(`[Libsync] Failed to load libsync JSON for ${audioId}:`, error.message);
+        .then((data) => setLipsync(data))
+        .catch((err) => {
+          console.warn(`[Libsync] Failed to load lip sync for ${audioId}:`, err.message);
           setLipsync(null);
         });
     }
-  }, [audioId]);
+  }, [audioId, lipSyncUrl]);
 
   useFrame(() => {
     // Mixer is automatically updated by useAnimations hook

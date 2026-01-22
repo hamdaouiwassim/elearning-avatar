@@ -13,7 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
 
 export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) => {
   // --- Hooks & State ---
-  const { setAudioElement, setAudioId } = useChat();
+  const { setAudioElement, setAudioId, setLipSyncUrl } = useChat();
   const audioRef = useRef(null);
 
   // Custom hooks for logic extraction
@@ -45,8 +45,9 @@ export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) =
       }
       setAudioElement(null);
       setAudioId(null);
+      setLipSyncUrl(null);
     };
-  }, [setAudioElement, setAudioId]);
+  }, [setAudioElement, setAudioId, setLipSyncUrl]);
 
   // --- Callbacks ---
 
@@ -65,6 +66,7 @@ export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) =
         audioRef.current.load();
         setAudioElement(audioRef.current);
         setAudioId(audioId || null);
+        setLipSyncUrl(null); // Lab uses /audios/ from audioId
         await audioRef.current.play();
         return true;
       } catch (error) {
@@ -72,7 +74,7 @@ export const LabPage = ({ onBackToHome, course, lab, initialExercise = null }) =
         return false;
       }
     },
-    [setAudioElement, setAudioId]
+    [setAudioElement, setAudioId, setLipSyncUrl]
   );
 
   // --- Derived State ---

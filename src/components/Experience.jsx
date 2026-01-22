@@ -203,7 +203,12 @@ export const Experience = () => {
 
   return (
     <>
-      <CameraControls ref={cameraControls} />
+      <CameraControls
+        ref={cameraControls}
+        enabled={true}
+        mouseButtons={{ left: 0, middle: 0, right: 0, wheel: 0 }}
+        touches={{ one: 0, two: 0, three: 0 }}
+      />
       <Environment preset="sunset" />
       {/* Wrapping Dots into Suspense to prevent Blink when Troika/Font is loaded */}
       <Suspense>

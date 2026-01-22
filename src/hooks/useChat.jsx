@@ -25,6 +25,7 @@ export const ChatProvider = ({ children }) => {
   const [avatarPosition, setAvatarPosition] = useState("center"); // "center" or "right"
   const [audioElement, setAudioElement] = useState(null); // Audio element reference
   const [audioId, setAudioId] = useState(null); // Current audio ID for libsync
+  const [lipSyncUrl, setLipSyncUrl] = useState(null); // Optional API URL for lip-sync JSON (quiz, chapter)
   const [avatarScreenPosition, setAvatarScreenPosition] = useState({ x: 0.5, y: 0.2 }); // Avatar's screen position (0-1 normalized)
   const onMessagePlayed = () => {
     setMessages((messages) => messages.slice(1));
@@ -53,6 +54,8 @@ export const ChatProvider = ({ children }) => {
         setAudioElement,
         audioId,
         setAudioId,
+        lipSyncUrl,
+        setLipSyncUrl,
         avatarScreenPosition,
         setAvatarScreenPosition,
       }}
