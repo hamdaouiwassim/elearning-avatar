@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { Avatar } from "./Avatar";
 import { useChat } from "../hooks/useChat";
 import { useAudioState } from "../hooks/useAudioState";
+import { Leva } from "leva";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
 
@@ -482,17 +483,19 @@ export const QuizPage = () => {
   // Results view
   if (submitted && results) {
     return (
+      <>
+      <Leva hidden />
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 py-8 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Avatar Column */}
             <div className="lg:col-span-1">
-              <div className="sticky top-6 h-[400px] bg-white rounded-xl shadow-xl p-4">
+              <div className="sticky top-6 h-[400px] p-4">
                 <div className="mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">Assistant</h3>
+                  <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">Assistant</h3>
                   {isAvatarSpeaking && (
-                    <div className="flex items-center gap-2 text-sm text-pink-600 mb-2">
-                      <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></div>
+                    <div className="flex items-center gap-2 justify-center text-sm text-pink-600 mb-2">
+                      <div className="w-2 h-2 text-center bg-pink-500 rounded-full animate-pulse"></div>
                       Avatar actif
                     </div>
                   )}
@@ -649,22 +652,25 @@ export const QuizPage = () => {
         className="hidden"
       />
     </div>
+    </>
     );
   }
 
   // Quiz view
   return (
+    <>
+    <Leva hidden />
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 py-8 px-4">
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Avatar Column */}
           <div className="lg:col-span-1">
-            <div className="sticky top-6 h-[400px] bg-white rounded-xl shadow-xl p-4">
+            <div className="sticky top-6 h-[400px]  p-4">
               <div className="mb-4">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Assistant</h3>
+                <h3 className="text-lg text-center font-semibold text-gray-800 mb-2">Assistant</h3>
                 {isAvatarSpeaking && (
-                  <div className="flex items-center gap-2 text-sm text-pink-600 mb-2">
-                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></div>
+                  <div className="flex items-center gap-2 justify-center text-sm text-pink-600 mb-2">
+                    <div className="w-2 h-2 text-center bg-pink-500 rounded-full animate-pulse"></div>
                     Avatar actif
                   </div>
                 )}
@@ -864,5 +870,6 @@ export const QuizPage = () => {
         className="hidden"
       />
     </div>
+    </>
   );
 };
