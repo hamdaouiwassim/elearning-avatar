@@ -444,6 +444,32 @@ export const UI = ({
       return;
     }
 
+    const courseId = selectedCourse?.courseId;
+    const chapterId = selectedCourse?.id;
+
+    // Resume from pause without jumping pages
+    if (isPaused && audioRef.current) {
+      if (currentPageAudio && courseId && chapterId) {
+        if (setPdfPageNumber) {
+          setPdfPageNumber(currentPageAudio);
+        }
+        if (!audioRef.current.src) {
+          const loaded = await loadPageAudio(currentPageAudio, courseId, chapterId);
+          if (loaded) {
+            await audioRef.current.play();
+          }
+        } else {
+          await audioRef.current.play();
+        }
+      } else {
+        await audioRef.current.play();
+      }
+      setIsPlaying(true);
+      setIsPaused(false);
+      setIsDocumentAudio(true);
+      return;
+    }
+
     // If chapter is complete, replay from the beginning
     if (isChapterComplete) {
       setIsChapterComplete(false);
@@ -452,8 +478,6 @@ export const UI = ({
         setPdfPageNumber(1);
       }
       // Start playing from first page
-      const courseId = selectedCourse?.courseId;
-      const chapterId = selectedCourse?.id;
       if (courseId && chapterId && pageTimings.length > 0) {
         const loaded = await loadPageAudio(1, courseId, chapterId);
         if (loaded && audioRef.current) {
@@ -482,9 +506,6 @@ export const UI = ({
       // Set audio element and ID in context for Avatar libsync
       setAudioElement(audioRef.current);
       setAudioId(selectedCourse.id);
-      const courseId = selectedCourse?.courseId;
-      const chapterId = selectedCourse?.id;
-      setLipSyncUrl(courseId && chapterId ? `/api/courses/${courseId}/chapters/${chapterId}/lip-sync` : null);
 
       // On first play after document load, start from beginning; otherwise resume from saved position
       if (!hasPlayedOnce) {
@@ -514,17 +535,14 @@ export const UI = ({
         if (setPdfPageNumber) {
           setPdfPageNumber(firstPage);
         }
+        setLipSyncUrl(`/api/courses/${courseId}/chapters/${chapterId}/lip-sync/${firstPage}`);
         const loaded = await loadPageAudio(firstPage, courseId, chapterId);
         if (loaded && audioRef.current) {
           await audioRef.current.play();
-        } else {
-          // Fallback to old approach if page audio loading fails
-          await audioRef.current.play();
         }
       } else {
-        // Fallback to old single-audio approach
-        setIsChapterComplete(false); // Reset completion status when starting to play
-        await audioRef.current.play();
+        alert("Générez l'audio page par page avant de lancer la lecture.");
+        return;
       }
       setIsPlaying(true);
       setIsPaused(false);
@@ -609,7 +627,6 @@ export const UI = ({
         setAudioId(audioId);
         const courseId = selectedCourse?.courseId;
         const chapterId = selectedCourse?.id;
-        setLipSyncUrl(courseId && chapterId ? `/api/courses/${courseId}/chapters/${chapterId}/lip-sync` : null);
 
         // On first play after document load, start from beginning; otherwise resume from saved position
         if (!hasPlayedOnce) {
@@ -638,16 +655,14 @@ export const UI = ({
           if (setPdfPageNumber) {
             setPdfPageNumber(firstPage);
           }
+          setLipSyncUrl(`/api/courses/${courseId}/chapters/${chapterId}/lip-sync/${firstPage}`);
           const loaded = await loadPageAudio(firstPage, courseId, chapterId);
           if (loaded && audioRef.current) {
             await audioRef.current.play();
-          } else {
-            // Fallback to old approach if page audio loading fails
-            await audioRef.current.play();
           }
         } else {
-          // Fallback to old single-audio approach
-          await audioRef.current.play();
+          alert("Générez l'audio page par page avant de lancer la lecture.");
+          return;
         }
         setIsPlaying(true);
         setIsPaused(false);
@@ -2028,7 +2043,8 @@ export const UI = ({
             }}
             onPlay={() => setIsPlaying(true)}
             onPause={() => {
-              setIsPaused(false);
+              setIsPlaying(false);
+              setIsPaused(true);
               // Save position when paused (for document audio)
               if (selectedCourse?.id && isDocumentAudio && audioRef.current) {
                 savePosition(selectedCourse.id, audioRef.current.currentTime);
