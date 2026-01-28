@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const API_URL = import.meta.env.VITE_API_URL ;
 
@@ -7,6 +8,12 @@ export const Login = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState("");
+  const [forgotSuccess, setForgotSuccess] = useState("");
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,12 +56,56 @@ export const Login = ({ onLoginSuccess }) => {
     }
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotError("");
+    setForgotSuccess("");
+    setForgotLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+
+      if (response.ok) {
+        setForgotSuccess("Si un compte existe, un email de réinitialisation a été envoyé.");
+      } else {
+        let data = {};
+        try {
+          data = await response.json();
+        } catch {
+          data = {};
+        }
+        setForgotError(data.error || "Impossible d'envoyer la demande. Veuillez réessayer.");
+      }
+    } catch (err) {
+      console.error("Forgot password error:", err);
+      setForgotError("Erreur réseau. Veuillez réessayer.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div className="bg-white rounded-2xl shadow-2xl p-8 fade-in">
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 relative">
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="absolute top-0 left-0 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Retour à l'accueil"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
             <div className="flex justify-center mb-4">
               <img 
                 src="/logo.png" 
@@ -62,9 +113,7 @@ export const Login = ({ onLoginSuccess }) => {
                 className="h-20 w-auto"
               />
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              Titan Academy
-            </h1>
+           
             <p className="text-gray-600">Connectez-vous pour continuer</p>
           </div>
 
@@ -163,6 +212,65 @@ export const Login = ({ onLoginSuccess }) => {
               />
             </div>
 
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextValue = !showForgotPassword;
+                  setShowForgotPassword(nextValue);
+                  if (nextValue) {
+                    setForgotEmail(email);
+                    setForgotError("");
+                    setForgotSuccess("");
+                  }
+                }}
+                className="text-sm font-semibold text-indigo-600 hover:text-indigo-500 transition-colors"
+              >
+                Mot de passe oublié ?
+              </button>
+            </div>
+
+            {showForgotPassword && (
+              <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+                {forgotError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{forgotError}</p>
+                  </div>
+                )}
+                {forgotSuccess && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <p className="text-sm text-emerald-700">{forgotSuccess}</p>
+                  </div>
+                )}
+                <div>
+                  <label
+                    htmlFor="forgot-email"
+                    className="block text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    id="forgot-email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Entrez votre email"
+                    required
+                    disabled={forgotLoading}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={forgotLoading || !forgotEmail}
+                  className="w-full bg-white border border-indigo-200 text-indigo-700 py-2.5 px-4 rounded-lg font-semibold hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {forgotLoading ? "Envoi..." : "Envoyer le lien"}
+                </button>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading || !email || !password}
@@ -216,7 +324,17 @@ export const Login = ({ onLoginSuccess }) => {
           </form>
 
           {/* Footer */}
-          <div className="mt-6 text-center text-sm text-gray-500">
+          <div className="mt-6 text-center text-sm text-gray-500 space-y-2">
+            <p>
+              Pas encore de compte ?{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/register")}
+                className="text-indigo-600 hover:text-indigo-500 font-semibold"
+              >
+                S'inscrire
+              </button>
+            </p>
             <p>Titan Academy - Plateforme d'apprentissage interactive</p>
           </div>
         </div>

@@ -1,23 +1,15 @@
 import { useState } from "react";
-import { Register } from "./Register";
+import { useNavigate } from "react-router-dom";
 
-const API_URL = import.meta.env.VITE_API_URL ;
-
-export const LandingPage = ({ onLoginSuccess }) => {
-  const [showRegister, setShowRegister] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+export const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
     if (element) {
       element.scrollIntoView({ behavior: "smooth" });
     }
-  }
-
-  if (showRegister) {
-    return <Register onRegisterSuccess={onLoginSuccess} onBack={() => setShowRegister(false)} />;
   }
 
   return (
@@ -79,13 +71,13 @@ export const LandingPage = ({ onLoginSuccess }) => {
             </div>
             <div className="hidden md:flex items-center space-x-4">
               <button
-                onClick={() => setShowLogin(true)}
+                onClick={() => navigate("/login")}
                 className="px-5 py-2.5 text-gray-700 hover:text-teal-700 transition-all font-medium"
               >
                 Connexion
               </button>
               <button
-                onClick={() => setShowRegister(true)}
+                onClick={() => navigate("/register")}
                 className="px-6 py-2.5 bg-gradient-to-r from-teal-700 via-cyan-500 to-orange-500 text-white rounded-xl font-semibold hover:shadow-xl hover:scale-105 transition-all transform"
               >
                 S'inscrire
@@ -150,7 +142,7 @@ export const LandingPage = ({ onLoginSuccess }) => {
                 <div className="pt-4 border-t border-gray-200 flex flex-col space-y-2">
                   <button
                     onClick={() => {
-                      setShowLogin(true);
+                      navigate("/login");
                       setMobileMenuOpen(false);
                     }}
                     className="w-full px-4 py-2 text-gray-700 hover:text-indigo-600 transition-colors text-left font-medium"
@@ -159,7 +151,7 @@ export const LandingPage = ({ onLoginSuccess }) => {
                   </button>
                   <button
                     onClick={() => {
-                      setShowRegister(true);
+                      navigate("/register");
                       setMobileMenuOpen(false);
                     }}
                     className="w-full px-6 py-2.5 bg-gradient-to-r from-teal-700 via-cyan-500 to-orange-500 text-white rounded-xl font-semibold"
@@ -211,7 +203,7 @@ export const LandingPage = ({ onLoginSuccess }) => {
           {/* Enhanced CTA buttons */}
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center animate-fade-in-up animation-delay-400 mb-16">
             <button
-              onClick={() => setShowRegister(true)}
+              onClick={() => navigate("/register")}
               className="group relative px-12 py-6 bg-gradient-to-r from-teal-700 via-cyan-500 to-orange-500 text-white rounded-2xl font-bold text-xl hover:shadow-2xl transition-all transform hover:scale-110 overflow-hidden min-w-[280px]"
             >
               <span className="relative z-10 flex items-center justify-center gap-3">
@@ -511,7 +503,7 @@ export const LandingPage = ({ onLoginSuccess }) => {
             </div>
           </div>
           <button
-            onClick={() => setShowRegister(true)}
+            onClick={() => navigate("/register")}
             className="group relative px-12 py-6 bg-gradient-to-r from-teal-700 via-cyan-500 to-orange-500 text-white rounded-2xl font-bold text-xl hover:shadow-2xl transition-all transform hover:scale-105 overflow-hidden"
           >
             <span className="relative z-10">Commencez votre parcours maintenant</span>
@@ -542,13 +534,13 @@ export const LandingPage = ({ onLoginSuccess }) => {
           <p className="text-cyan-200 mb-8 text-lg">Plateforme de formation digitale innovante</p>
           <div className="flex justify-center space-x-8 mb-8">
             <button
-              onClick={() => setShowRegister(true)}
+              onClick={() => navigate("/register")}
               className="text-cyan-200 hover:text-white transition-colors font-medium hover:scale-110 transform"
             >
               S'inscrire
             </button>
             <button
-              onClick={() => setShowLogin(true)}
+              onClick={() => navigate("/login")}
               className="text-cyan-200 hover:text-white transition-colors font-medium hover:scale-110 transform"
             >
               Connexion
@@ -561,255 +553,6 @@ export const LandingPage = ({ onLoginSuccess }) => {
           </div>
         </div>
       </footer>
-
-      {/* Login Modal */}
-      {showLogin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full mx-4 transform animate-scale-in border border-gray-100">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-black text-gray-900 bg-gradient-to-r from-teal-700 to-cyan-500 bg-clip-text text-transparent">
-                Connexion
-              </h2>
-              <button
-                onClick={() => setShowLogin(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <LoginForm
-              onLoginSuccess={onLoginSuccess}
-              onClose={() => setShowLogin(false)}
-              onForgotPassword={() => {
-                setShowLogin(false);
-                setShowForgotPassword(true);
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Forgot Password Modal */}
-      {showForgotPassword && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full mx-4 transform animate-scale-in border border-gray-100">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-black text-gray-900 bg-gradient-to-r from-teal-700 to-cyan-500 bg-clip-text text-transparent">
-                Mot de passe oublié
-              </h2>
-              <button
-                onClick={() => setShowForgotPassword(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <ForgotPasswordForm onClose={() => setShowForgotPassword(false)} />
-          </div>
-        </div>
-      )}
-
     </div>
-  );
-};
-
-// Login Form Component (extracted from Login.jsx)
-const LoginForm = ({ onLoginSuccess, onClose, onForgotPassword }) => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.authenticated) {
-        localStorage.setItem("isAuthenticated", "true");
-        localStorage.setItem("userEmail", data.email || email);
-        onLoginSuccess();
-        onClose();
-      } else {
-        setError(data.error || "Invalid email or password");
-      }
-    } catch (err) {
-      console.error("Login error:", err);
-      setError("Network error. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {error && (
-        <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
-          <p className="text-sm text-red-600 font-medium">{error}</p>
-        </div>
-      )}
-
-      <div>
-        <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
-          Email
-        </label>
-        <input
-          type="email"
-          id="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
-          placeholder="Entrez votre email"
-          required
-          disabled={loading}
-        />
-      </div>
-
-      <div>
-        <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
-          Mot de passe
-        </label>
-        <input
-          type="password"
-          id="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
-          placeholder="Entrez votre mot de passe"
-          required
-          disabled={loading}
-        />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onForgotPassword}
-          className="text-sm font-semibold text-teal-700 hover:text-cyan-600 transition-colors"
-        >
-          Mot de passe oublié ?
-        </button>
-      </div>
-
-      <button
-        type="submit"
-        disabled={loading || !email || !password}
-        className="w-full bg-gradient-to-r from-teal-700 via-cyan-500 to-orange-500 text-white py-4 px-6 rounded-xl font-bold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
-      >
-        {loading ? "Connexion..." : "Se connecter"}
-      </button>
-    </form>
-  );
-};
-
-const ForgotPasswordForm = ({ onClose }) => {
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    setLoading(true);
-
-    try {
-      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (response.ok) {
-        setSuccess("Si un compte existe, un email de réinitialisation a été envoyé.");
-      } else if (response.status === 404) {
-        setError("La réinitialisation du mot de passe n'est pas disponible pour le moment.");
-      } else {
-        let data = {};
-        try {
-          data = await response.json();
-        } catch {
-          data = {};
-        }
-        setError(data.error || "Impossible d'envoyer la demande. Veuillez réessayer.");
-      }
-    } catch (err) {
-      console.error("Forgot password error:", err);
-      setError("Erreur réseau. Veuillez réessayer.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <p className="text-sm text-gray-600">
-        Entrez votre email et nous vous enverrons un lien de réinitialisation.
-      </p>
-
-      {error && (
-        <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
-          <p className="text-sm text-red-600 font-medium">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="p-4 bg-emerald-50 border-l-4 border-emerald-500 rounded-lg">
-          <p className="text-sm text-emerald-700 font-medium">{success}</p>
-        </div>
-      )}
-
-      <div>
-        <label htmlFor="forgot-email" className="block text-sm font-semibold text-gray-700 mb-2">
-          Email
-        </label>
-        <input
-          type="email"
-          id="forgot-email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
-          placeholder="Entrez votre email"
-          required
-          disabled={loading}
-        />
-      </div>
-
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 border-2 border-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold hover:bg-gray-50 transition-all"
-        >
-          Retour
-        </button>
-        <button
-          type="submit"
-          disabled={loading || !email}
-          className="flex-1 bg-gradient-to-r from-teal-700 via-cyan-500 to-orange-500 text-white py-3 px-4 rounded-xl font-bold hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? "Envoi..." : "Envoyer"}
-        </button>
-      </div>
-    </form>
   );
 };

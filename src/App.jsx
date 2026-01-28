@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { LandingPage } from "./components/LandingPage";
 import { checkCapabilities } from "./utils/capabilityChecker";
 import { isAndroid } from "./utils/deviceDetector";
 import { checkAuthStatus, isAuthenticated } from "./utils/auth";
@@ -71,11 +70,6 @@ function App() {
   const handleLoginSuccess = () => {
     setAuthenticated(true);
   };
-
-  // Show login if not authenticated
-  if (!authenticated && !authChecking) {
-    return <LandingPage onLoginSuccess={handleLoginSuccess} />;
-  }
 
   return (
     <AppRouter

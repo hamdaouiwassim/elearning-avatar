@@ -4,6 +4,9 @@ import { Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Leva } from "leva";
 import { Home } from "./components/Home";
+import { LandingPage } from "./components/LandingPage";
+import { Login } from "./components/Login";
+import { Register } from "./components/Register";
 import { ChapterSelection } from "./components/ChapterSelection";
 import { CapabilityError } from "./components/CapabilityError";
 import { OldBrowserError } from "./components/OldBrowserError";
@@ -505,8 +508,8 @@ const FinalProjectRoute = ({ authenticated }) => {
 };
 
 export const AppRouter = ({ authenticated, authChecking, capabilityCheckDone, capabilities, onRetryCapabilityCheck, onLoginSuccess }) => {
-  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const navigate = useNavigate();
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
 
   // Make handleOpenLabs available globally for Home component
   useEffect(() => {
@@ -583,25 +586,34 @@ export const AppRouter = ({ authenticated, authChecking, capabilityCheckDone, ca
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={
-        authenticated ? <Navigate to="/" replace /> : <Navigate to="/" replace />
+        authenticated ? <Navigate to="/" replace /> : <Login onLoginSuccess={onLoginSuccess} />
+      } />
+      <Route path="/register" element={
+        authenticated ? <Navigate to="/" replace /> : (
+          <Register onRegisterSuccess={onLoginSuccess} onBack={() => navigate("/login")} />
+        )
+      } />
+
+      <Route path="/" element={
+        authenticated ? (
+          <ProtectedRoute authenticated={authenticated}>
+            {!capabilityCheckDone ? (
+              <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center">
+                <div className="text-center text-white">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                  <p>Checking system requirements...</p>
+                </div>
+              </div>
+            ) : (
+              <Home onStartLearning={handleStartLearning} />
+            )}
+          </ProtectedRoute>
+        ) : (
+          <LandingPage />
+        )
       } />
 
       {/* Protected routes */}
-      <Route path="/" element={
-        <ProtectedRoute authenticated={authenticated}>
-          {!capabilityCheckDone ? (
-            <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center">
-              <div className="text-center text-white">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                <p>Checking system requirements...</p>
-              </div>
-            </div>
-          ) : (
-            <Home onStartLearning={handleStartLearning} />
-          )}
-        </ProtectedRoute>
-      } />
-
       <Route path="/courses/:courseId/chapters" element={
         <ProtectedRoute authenticated={authenticated}>
           <ChaptersPage authenticated={authenticated} />
