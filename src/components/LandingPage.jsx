@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Register } from "./Register";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+const API_URL = import.meta.env.VITE_API_URL ;
 
 export const LandingPage = ({ onLoginSuccess }) => {
   const [showRegister, setShowRegister] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const scrollToSection = (sectionId) => {
@@ -578,7 +579,36 @@ export const LandingPage = ({ onLoginSuccess }) => {
                 </svg>
               </button>
             </div>
-            <LoginForm onLoginSuccess={onLoginSuccess} onClose={() => setShowLogin(false)} />
+            <LoginForm
+              onLoginSuccess={onLoginSuccess}
+              onClose={() => setShowLogin(false)}
+              onForgotPassword={() => {
+                setShowLogin(false);
+                setShowForgotPassword(true);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full mx-4 transform animate-scale-in border border-gray-100">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-black text-gray-900 bg-gradient-to-r from-teal-700 to-cyan-500 bg-clip-text text-transparent">
+                Mot de passe oublié
+              </h2>
+              <button
+                onClick={() => setShowForgotPassword(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <ForgotPasswordForm onClose={() => setShowForgotPassword(false)} />
           </div>
         </div>
       )}
@@ -588,7 +618,7 @@ export const LandingPage = ({ onLoginSuccess }) => {
 };
 
 // Login Form Component (extracted from Login.jsx)
-const LoginForm = ({ onLoginSuccess, onClose }) => {
+const LoginForm = ({ onLoginSuccess, onClose, onForgotPassword }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -667,6 +697,16 @@ const LoginForm = ({ onLoginSuccess, onClose }) => {
         />
       </div>
 
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onForgotPassword}
+          className="text-sm font-semibold text-teal-700 hover:text-cyan-600 transition-colors"
+        >
+          Mot de passe oublié ?
+        </button>
+      </div>
+
       <button
         type="submit"
         disabled={loading || !email || !password}
@@ -674,6 +714,102 @@ const LoginForm = ({ onLoginSuccess, onClose }) => {
       >
         {loading ? "Connexion..." : "Se connecter"}
       </button>
+    </form>
+  );
+};
+
+const ForgotPasswordForm = ({ onClose }) => {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        setSuccess("Si un compte existe, un email de réinitialisation a été envoyé.");
+      } else if (response.status === 404) {
+        setError("La réinitialisation du mot de passe n'est pas disponible pour le moment.");
+      } else {
+        let data = {};
+        try {
+          data = await response.json();
+        } catch {
+          data = {};
+        }
+        setError(data.error || "Impossible d'envoyer la demande. Veuillez réessayer.");
+      }
+    } catch (err) {
+      console.error("Forgot password error:", err);
+      setError("Erreur réseau. Veuillez réessayer.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <p className="text-sm text-gray-600">
+        Entrez votre email et nous vous enverrons un lien de réinitialisation.
+      </p>
+
+      {error && (
+        <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
+          <p className="text-sm text-red-600 font-medium">{error}</p>
+        </div>
+      )}
+
+      {success && (
+        <div className="p-4 bg-emerald-50 border-l-4 border-emerald-500 rounded-lg">
+          <p className="text-sm text-emerald-700 font-medium">{success}</p>
+        </div>
+      )}
+
+      <div>
+        <label htmlFor="forgot-email" className="block text-sm font-semibold text-gray-700 mb-2">
+          Email
+        </label>
+        <input
+          type="email"
+          id="forgot-email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+          placeholder="Entrez votre email"
+          required
+          disabled={loading}
+        />
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 border-2 border-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold hover:bg-gray-50 transition-all"
+        >
+          Retour
+        </button>
+        <button
+          type="submit"
+          disabled={loading || !email}
+          className="flex-1 bg-gradient-to-r from-teal-700 via-cyan-500 to-orange-500 text-white py-3 px-4 rounded-xl font-bold hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? "Envoi..." : "Envoyer"}
+        </button>
+      </div>
     </form>
   );
 };

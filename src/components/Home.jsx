@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { logout, getUserEmail } from "../utils/auth";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+const API_URL = import.meta.env.VITE_API_URL ;
 
 export const Home = ({ onStartLearning }) => {
   const [courses, setCourses] = useState([]);

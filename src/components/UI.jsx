@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChat } from "../hooks/useChat";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+const API_URL = import.meta.env.VITE_API_URL ;
 
 export const UI = ({
   pdfReaderOpen,
@@ -51,19 +51,9 @@ export const UI = ({
   }, [audioElement]);
   const [isPaused, setIsPaused] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
-  const [audioData, setAudioData] = useState(null);
-  const [audioMimeType, setAudioMimeType] = useState(null);
-  const [documentAudioSrc, setDocumentAudioSrc] = useState(null); // Store document audio source
   const audioRef = useRef(null);
   const [isDocumentAudio, setIsDocumentAudio] = useState(false); // Track if playing document audio
   const positionSaveIntervalRef = useRef(null);
-
-  // Get saved position for document
-  const getSavedPosition = useCallback((docId) => {
-    if (!docId) return 0;
-    const saved = localStorage.getItem(`audio_position_${docId}`);
-    return saved ? parseFloat(saved) : 0;
-  }, []);
 
   // Save position for document
   const savePosition = useCallback((docId, position) => {
@@ -134,7 +124,6 @@ export const UI = ({
 
   // Page timing synchronization state
   const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number, duration: number, audioPath: string}
-  const [hasPlayedOnce, setHasPlayedOnce] = useState(false); // Track if audio has been played for current document
   const [currentPageAudio, setCurrentPageAudio] = useState(null); // Current page being played
   const [isChapterComplete, setIsChapterComplete] = useState(false); // Track if all pages have been read
 
@@ -204,7 +193,7 @@ export const UI = ({
       if (!selectedCourse?.courseId) return;
 
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+        const API_URL = import.meta.env.VITE_API_URL ;
         const response = await fetch(`${API_URL}/api/courses/${selectedCourse.courseId}/labs`, {
           credentials: 'include'
         });
@@ -401,9 +390,6 @@ export const UI = ({
   // Reset audio when document changes
   useEffect(() => {
     if (selectedCourse) {
-      setAudioData(null);
-      setAudioMimeType(null);
-      setDocumentAudioSrc(null);
       setIsPlaying(false);
       setIsPaused(false);
       setIsDocumentAudio(false);
@@ -413,7 +399,6 @@ export const UI = ({
       setAnswerText(null); // Clear answer text when document changes
       setPageTimings([]); // Reset page timings
       setCurrentPageAudio(null); // Reset current page audio
-      setHasPlayedOnce(false); // Reset play flag for new document
       setIsChapterComplete(false); // Reset chapter completion status
       if (audioRef.current) {
         audioRef.current.pause();
@@ -495,191 +480,28 @@ export const UI = ({
     setShowHistoryModal(false);
     setAnswerText(null);
 
-    // If we already have document audio data, restore and play it
-    if ((audioData || documentAudioSrc) && audioRef.current) {
-      // Restore document audio source if it was changed (e.g., by answer audio)
-      if (documentAudioSrc && audioRef.current.src !== documentAudioSrc) {
-        audioRef.current.src = documentAudioSrc;
-        audioRef.current.load();
-      }
-
-      // Set audio element and ID in context for Avatar libsync
-      setAudioElement(audioRef.current);
-      setAudioId(selectedCourse.id);
-
-      // On first play after document load, start from beginning; otherwise resume from saved position
-      if (!hasPlayedOnce) {
-        audioRef.current.currentTime = 0;
-        setHasPlayedOnce(true);
-        // Reset to first page
-        if (pdfNumPages && setPdfPageNumber) {
-          setPdfPageNumber(1);
-        }
-      } else {
-        // Restore saved position for subsequent plays
-        const savedPosition = getSavedPosition(selectedCourse.id);
-        if (savedPosition > 0) {
-          audioRef.current.currentTime = savedPosition;
-        }
-      }
-
-      setIsDocumentAudio(true);
-
-      // For page-based audio: load first page audio if available
-      const hasPageAudio = pageTimings.length > 0 && pageTimings[0]?.audioPath;
-
-      if (hasPageAudio && courseId && chapterId) {
-        // Use new page-based audio approach
-        const firstPage = 1;
-        setIsChapterComplete(false); // Reset completion status when starting to play
-        if (setPdfPageNumber) {
-          setPdfPageNumber(firstPage);
-        }
-        setLipSyncUrl(`/api/courses/${courseId}/chapters/${chapterId}/lip-sync/${firstPage}`);
-        const loaded = await loadPageAudio(firstPage, courseId, chapterId);
-        if (loaded && audioRef.current) {
-          await audioRef.current.play();
-        }
-      } else {
-        alert("Générez l'audio page par page avant de lancer la lecture.");
-        return;
-      }
-      setIsPlaying(true);
-      setIsPaused(false);
-
-      // Start saving position periodically
-      if (positionSaveIntervalRef.current) {
-        clearInterval(positionSaveIntervalRef.current);
-      }
-      positionSaveIntervalRef.current = setInterval(() => {
-        if (audioRef.current && isDocumentAudio && !audioRef.current.paused) {
-          savePosition(selectedCourse.id, audioRef.current.currentTime);
-        }
-      }, 1000);
+    const hasPageAudio = pageTimings.length > 0 && pageTimings[0]?.audioPath;
+    if (!hasPageAudio || !courseId || !chapterId) {
+      alert("Générez l'audio page par page avant de lancer la lecture.");
       return;
     }
 
     setTtsLoading(true);
     try {
-      const audioId = selectedCourse.id;
-
-      // First, check if audio file already exists
-      const audioUrl = `${API_URL}/audios/${audioId}.wav`;
-      let audioSrc = null;
-
-      try {
-        const checkResponse = await fetch(audioUrl, {
-          method: "GET",
-          headers: {
-            "Accept": "audio/wav",
-          },
-        });
-
-        if (checkResponse.ok) {
-          // Audio file exists, use it directly
-          audioSrc = audioUrl;
-          setAudioMimeType("audio/wav");
-          // Store document audio source for later restoration
-          setDocumentAudioSrc(audioUrl);
-        } else {
-          // Audio file doesn't exist, generate it via TTS API
-          throw new Error("Audio not found, will generate");
-        }
-      } catch (checkError) {
-        // Audio doesn't exist, generate it via TTS API
-        const ttsResponse = await fetch(`${API_URL}/api/tts`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ docId: audioId }),
-        });
-
-        if (!ttsResponse.ok) {
-          throw new Error(`TTS API error! status: ${ttsResponse.status}`);
-        }
-
-        const data = await ttsResponse.json();
-
-        if (data.audioData && data.mimeType) {
-          setAudioData(data.audioData);
-          setAudioMimeType(data.mimeType);
-
-          // Create audio source from base64 data
-          audioSrc = `data:${data.mimeType};base64,${data.audioData}`;
-          // Store document audio source for later restoration
-          setDocumentAudioSrc(audioSrc);
-        } else {
-          throw new Error("Invalid TTS response format");
-        }
+      const startPage = currentPageAudio || 1;
+      if (setPdfPageNumber) {
+        setPdfPageNumber(startPage);
       }
-
-      // Play the audio
-      if (audioSrc && audioRef.current) {
-        audioRef.current.src = audioSrc;
-        audioRef.current.load();
-
-        // Store document audio source
-        setDocumentAudioSrc(audioSrc);
-
-        // Set audio element and ID in context for Avatar libsync
-        setAudioElement(audioRef.current);
-        setAudioId(audioId);
-        const courseId = selectedCourse?.courseId;
-        const chapterId = selectedCourse?.id;
-
-        // On first play after document load, start from beginning; otherwise resume from saved position
-        if (!hasPlayedOnce) {
-          audioRef.current.currentTime = 0;
-          setHasPlayedOnce(true);
-          // Reset to first page
-          if (pdfNumPages && setPdfPageNumber) {
-            setPdfPageNumber(1);
-          }
-        } else {
-          // Restore saved position for subsequent plays
-          const savedPosition = getSavedPosition(audioId);
-          if (savedPosition > 0) {
-            audioRef.current.currentTime = savedPosition;
-          }
-        }
-
-        setIsDocumentAudio(true);
-
-        // For page-based audio: load first page audio if available
-        const hasPageAudio = pageTimings.length > 0 && pageTimings[0]?.audioPath;
-
-        if (hasPageAudio && courseId && chapterId) {
-          // Use new page-based audio approach
-          const firstPage = 1;
-          if (setPdfPageNumber) {
-            setPdfPageNumber(firstPage);
-          }
-          setLipSyncUrl(`/api/courses/${courseId}/chapters/${chapterId}/lip-sync/${firstPage}`);
-          const loaded = await loadPageAudio(firstPage, courseId, chapterId);
-          if (loaded && audioRef.current) {
-            await audioRef.current.play();
-          }
-        } else {
-          alert("Générez l'audio page par page avant de lancer la lecture.");
-          return;
-        }
-        setIsPlaying(true);
-        setIsPaused(false);
-
-        // Start saving position periodically
-        if (positionSaveIntervalRef.current) {
-          clearInterval(positionSaveIntervalRef.current);
-        }
-        positionSaveIntervalRef.current = setInterval(() => {
-          if (audioRef.current && isDocumentAudio && !audioRef.current.paused) {
-            savePosition(audioId, audioRef.current.currentTime);
-          }
-        }, 1000); // Save every second
+      setIsChapterComplete(false);
+      const loaded = await loadPageAudio(startPage, courseId, chapterId);
+      if (loaded && audioRef.current) {
+        await audioRef.current.play();
       }
+      setIsPlaying(true);
+      setIsPaused(false);
     } catch (error) {
-      console.error("Error fetching TTS:", error);
-      alert("Échec de la génération audio. Veuillez réessayer.");
+      console.error("Error starting page TTS:", error);
+      alert("Échec de la lecture audio. Veuillez réessayer.");
     } finally {
       setTtsLoading(false);
     }
@@ -2015,12 +1837,12 @@ export const UI = ({
           <audio
             ref={audioRef}
             onEnded={() => {
-              // For page-based audio: move to next page when current page audio ends
+              // For document audio: move to next page when current page audio ends
               if (isDocumentAudio && currentPageAudio) {
                 // Play next page audio
                 playNextPage();
               } else {
-                // Old approach: single audio file ended
+                // Non-document audio ended (summary/answer)
                 setIsPlaying(false);
                 setIsPaused(false);
 
@@ -2448,7 +2270,7 @@ export const UI = ({
 const FinalProjectViewModal = ({ course, finalProject, onClose }) => {
   const [documents, setDocuments] = useState(finalProject?.documents || []);
   const [loading, setLoading] = useState(false);
-  const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+  const API_URL = import.meta.env.VITE_API_URL ;
 
   useEffect(() => {
     // Load documents if not already loaded

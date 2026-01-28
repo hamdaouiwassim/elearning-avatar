@@ -409,7 +409,7 @@ export function Avatar(props) {
 
   // Load lip-sync JSON when audioId or lipSyncUrl changes
   useEffect(() => {
-    const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+    const API_URL = import.meta.env.VITE_API_URL ;
 
     if (!audioId && !lipSyncUrl) {
       setLipsync(null);

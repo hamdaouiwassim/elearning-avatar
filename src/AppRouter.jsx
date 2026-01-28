@@ -48,7 +48,7 @@ const LearningPage = ({ authenticated }) => {
       }
 
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+        const API_URL = import.meta.env.VITE_API_URL ;
         const response = await fetch(`${API_URL}/api/courses/${courseId}/chapters/${chapterId}`, {
           credentials: 'include'
         });
@@ -230,7 +230,7 @@ const ChaptersPage = ({ authenticated }) => {
       }
 
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+        const API_URL = import.meta.env.VITE_API_URL ;
         const response = await fetch(`${API_URL}/api/courses/${courseId}`, {
           credentials: 'include'
         });
@@ -295,7 +295,7 @@ const LabsPage = ({ authenticated }) => {
       }
 
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+        const API_URL = import.meta.env.VITE_API_URL ;
         const response = await fetch(`${API_URL}/api/courses/${courseId}`, {
           credentials: 'include'
         });
@@ -361,7 +361,7 @@ const LabDetailPage = ({ authenticated }) => {
       }
 
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+        const API_URL = import.meta.env.VITE_API_URL ;
         
         const [courseResponse, labsResponse] = await Promise.all([
           fetch(`${API_URL}/api/courses/${courseId}`, { credentials: 'include' }),
@@ -436,7 +436,7 @@ const FinalProjectRoute = ({ authenticated }) => {
 
     const loadData = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+        const API_URL = import.meta.env.VITE_API_URL ;
         
         const [courseResponse, projectResponse] = await Promise.all([
           fetch(`${API_URL}/api/courses/${courseId}`, { credentials: 'include' }),
@@ -527,7 +527,7 @@ export const AppRouter = ({ authenticated, authChecking, capabilityCheckDone, ca
 
     // This is a course, fetch chapters and select the first one
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://102.211.209.131:3002";
+      const API_URL = import.meta.env.VITE_API_URL ;
       const response = await fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
         credentials: 'include'
       });
