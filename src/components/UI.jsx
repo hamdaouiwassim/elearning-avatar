@@ -108,6 +108,7 @@ export const UI = ({
   // Question history state
   const [questionHistory, setQuestionHistory] = useState([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Modal state
   const [showQuestionModal, setShowQuestionModal] = useState(false);
@@ -121,6 +122,35 @@ export const UI = ({
   const [suggestions, setSuggestions] = useState([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [duplicateQuestion, setDuplicateQuestion] = useState(null);
+
+  const getHistoryStorageKey = useCallback(() => {
+    const courseId = selectedCourse?.courseId || "unknown-course";
+    const chapterId = selectedCourse?.id || "unknown-chapter";
+    return `qa_history_${courseId}_${chapterId}`;
+  }, [selectedCourse?.courseId, selectedCourse?.id]);
+
+  const mergeHistoryEntries = useCallback((localEntries, serverEntries) => {
+    const merged = new Map();
+
+    const addEntry = (entry) => {
+      if (!entry) return;
+      const key = entry.serverId
+        ? `server:${entry.serverId}`
+        : `local:${entry.question || ""}|${entry.timestamp || ""}`;
+      if (!merged.has(key)) {
+        merged.set(key, entry);
+      }
+    };
+
+    (serverEntries || []).forEach(addEntry);
+    (localEntries || []).forEach(addEntry);
+
+    return Array.from(merged.values()).sort((a, b) => {
+      const aTime = new Date(a.timestamp || 0).getTime();
+      const bTime = new Date(b.timestamp || 0).getTime();
+      return bTime - aTime;
+    });
+  }, []);
 
   // Page timing synchronization state
   const [pageTimings, setPageTimings] = useState([]); // Array of {page: number, time: number, duration: number, audioPath: string}
@@ -395,7 +425,6 @@ export const UI = ({
       setIsDocumentAudio(false);
       setAnalysisText(null); // Clear analysis when document changes
       setSummaryText(null); // Clear summary when document changes
-      setQuestionHistory([]); // Clear question history when document changes
       setAnswerText(null); // Clear answer text when document changes
       setPageTimings([]); // Reset page timings
       setCurrentPageAudio(null); // Reset current page audio
@@ -422,6 +451,73 @@ export const UI = ({
       }
     }
   }, [selectedCourse?.id, selectedCourse?.courseId, fetchPageTimings, setAudioElement, setAudioId, setLipSyncUrl]);
+
+  useEffect(() => {
+    const loadQuestionHistory = async () => {
+      if (!selectedCourse?.courseId || !selectedCourse?.id) {
+        setQuestionHistory([]);
+        return;
+      }
+
+      const storageKey = getHistoryStorageKey();
+      let localHistory = [];
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          localHistory = JSON.parse(stored);
+        }
+      } catch (error) {
+        console.warn("[UI] Failed to parse local history:", error);
+      }
+
+      setQuestionHistory(localHistory);
+
+      const isAuth = localStorage.getItem("isAuthenticated") === "true";
+      if (!isAuth) return;
+
+      setHistoryLoading(true);
+      try {
+        const params = new URLSearchParams({
+          courseId: selectedCourse.courseId,
+          chapterId: selectedCourse.id,
+          limit: "50"
+        });
+        const response = await fetch(`${API_URL}/api/qa/history?${params.toString()}`, {
+          credentials: "include"
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const serverItems = Array.isArray(data.items) ? data.items : [];
+          const mappedServerItems = serverItems.map((item) => ({
+            id: item.id || Date.now(),
+            serverId: item.id || null,
+            question: item.question,
+            answer: item.answer,
+            audioUrl: item.audioUrl,
+            timestamp: item.timestamp
+          }));
+          const merged = mergeHistoryEntries(localHistory, mappedServerItems);
+          setQuestionHistory(merged);
+        }
+      } catch (error) {
+        console.error("[UI] Failed to load server history:", error);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    loadQuestionHistory();
+  }, [selectedCourse?.courseId, selectedCourse?.id, getHistoryStorageKey, mergeHistoryEntries]);
+
+  useEffect(() => {
+    if (!selectedCourse?.courseId || !selectedCourse?.id) return;
+    const storageKey = getHistoryStorageKey();
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(questionHistory));
+    } catch (error) {
+      console.warn("[UI] Failed to save local history:", error);
+    }
+  }, [questionHistory, selectedCourse?.courseId, selectedCourse?.id, getHistoryStorageKey]);
 
   const handlePlay = async () => {
     if (!selectedCourse || !selectedCourse.id) {
@@ -860,22 +956,55 @@ export const UI = ({
       let response;
 
       if (questionText.trim()) {
+        const historyContext = questionHistory
+          .filter((entry) => entry?.question && entry?.answer)
+          .slice(0, 5)
+          .map((entry) => ({
+            question: entry.question,
+            answer: entry.answer
+          }));
+
         // Submit text question
         response = await fetch(`${API_URL}/api/qa`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ question: questionText.trim() }),
+          credentials: "include",
+          body: JSON.stringify({
+            question: questionText.trim(),
+            courseId: selectedCourse?.courseId || null,
+            chapterId: selectedCourse?.id || null,
+            courseName: selectedCourse?.courseName || null,
+            chapterName: selectedCourse?.chapterName || selectedCourse?.chapter_name || null,
+            pageNumber: pdfPageNumber || null,
+            history: historyContext
+          }),
         });
       } else if (recordedAudio) {
         // Submit audio question
         const formData = new FormData();
         formData.append("question", recordedAudio.blob, "question.wav");
+        if (selectedCourse?.courseId) {
+          formData.append("courseId", selectedCourse.courseId);
+        }
+        if (selectedCourse?.id) {
+          formData.append("chapterId", selectedCourse.id);
+        }
+        if (selectedCourse?.courseName) {
+          formData.append("courseName", selectedCourse.courseName);
+        }
+        if (selectedCourse?.chapterName || selectedCourse?.chapter_name) {
+          formData.append("chapterName", selectedCourse?.chapterName || selectedCourse?.chapter_name);
+        }
+        if (pdfPageNumber) {
+          formData.append("pageNumber", String(pdfPageNumber));
+        }
 
         response = await fetch(`${API_URL}/api/qa`, {
           method: "POST",
           body: formData,
+          credentials: "include",
         });
       } else {
         return; // No question to submit
@@ -920,6 +1049,7 @@ export const UI = ({
         const questionInput = questionText.trim() || (recordedAudio ? "Audio Question" : "Question");
         const historyEntry = {
           id: Date.now(),
+          serverId: data.historyId || null,
           question: questionInput,
           answer: data.answer,
           audioUrl: audioUrl,
