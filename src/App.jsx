@@ -9,6 +9,7 @@ function App() {
   const [capabilityCheckDone, setCapabilityCheckDone] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
+  const [userRole, setUserRole] = useState(null);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -16,9 +17,10 @@ function App() {
       // First check localStorage for quick check
       if (isAuthenticated()) {
         // Then verify with server
-        const isAuth = await checkAuthStatus();
-        setAuthenticated(isAuth);
-        if (!isAuth) {
+        const authData = await checkAuthStatus();
+        setAuthenticated(authData.authenticated);
+        setUserRole(authData.role);
+        if (!authData.authenticated) {
           // Clear invalid auth state
           localStorage.removeItem("isAuthenticated");
           localStorage.removeItem("userEmail");
@@ -75,6 +77,7 @@ function App() {
     <AppRouter
       authenticated={authenticated}
       authChecking={authChecking}
+      userRole={userRole}
       capabilityCheckDone={capabilityCheckDone}
       capabilities={capabilities}
       onRetryCapabilityCheck={handleRetryCapabilityCheck}

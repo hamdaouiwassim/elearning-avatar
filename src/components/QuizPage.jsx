@@ -23,6 +23,7 @@ export const QuizPage = () => {
   const [attempts, setAttempts] = useState([]);
   const [bestScore, setBestScore] = useState(null);
   const [chapterName, setChapterName] = useState("");
+  const [nextChapter, setNextChapter] = useState(null);
   
   // Avatar hooks
   const { setAudioElement, setAudioId, setLipSyncUrl } = useChat();
@@ -89,6 +90,24 @@ export const QuizPage = () => {
         if (chapterResponse.ok) {
           const chapter = await chapterResponse.json();
           setChapterName(chapter.chapterName || chapter.title || 'Chapter');
+        }
+
+        // Fetch all chapters to find the next one
+        try {
+          const chaptersResponse = await fetch(
+            `${API_URL}/api/courses/${courseId}/chapters`,
+            { credentials: 'include' }
+          );
+          if (chaptersResponse.ok) {
+            const chaptersData = await chaptersResponse.json();
+            const chaptersArray = Array.isArray(chaptersData) ? chaptersData : [];
+            const currentIndex = chaptersArray.findIndex(ch => ch.id === chapterId);
+            if (currentIndex !== -1 && currentIndex < chaptersArray.length - 1) {
+              setNextChapter(chaptersArray[currentIndex + 1]);
+            }
+          }
+        } catch (err) {
+          console.warn('Could not load chapters list:', err);
         }
 
         // Fetch quiz questions
@@ -627,19 +646,33 @@ export const QuizPage = () => {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-4 mt-6">
-            <button
-              onClick={handleRestart}
-              className="flex-1 bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold"
-            >
-              Retake Quiz
-            </button>
-            <button
-              onClick={handleBack}
-              className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold"
-            >
-              Back to Chapter
-            </button>
+          <div className="space-y-3 mt-6">
+            {/* Next Chapter - shown when passed (>= 50%) and there is a next chapter */}
+            {results.percentage >= 50 && nextChapter && (
+              <button
+                onClick={() => navigate(`/courses/${courseId}/chapters/${nextChapter.id}/learn`)}
+                className="w-full bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold flex items-center justify-center gap-2"
+              >
+                <span>Chapitre suivant : {nextChapter.chapterName}</span>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </button>
+            )}
+            <div className="flex gap-4">
+              <button
+                onClick={handleRestart}
+                className="flex-1 bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold"
+              >
+                Retake Quiz
+              </button>
+              <button
+                onClick={handleBack}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold"
+              >
+                Back to Chapter
+              </button>
+            </div>
           </div>
         </div>
         </div>

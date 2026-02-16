@@ -18,6 +18,7 @@ import { checkAuthStatus, isAuthenticated } from "./utils/auth";
 import { CourseLabs } from "./components/CourseLabs";
 import { FinalProjectPage } from "./components/FinalProjectPage";
 import { QuizPage } from "./components/QuizPage";
+import { QuizManager } from "./components/QuizManager";
 
 // Lazy load heavy components for better TV performance with retry logic
 const Experience = lazyWithRetry(() => import("./components/Experience").then(module => ({ default: module.Experience })));
@@ -42,6 +43,7 @@ const LearningPage = ({ authenticated }) => {
   const [pdfScale, setPdfScale] = useState(1.0);
   const [pdfNumPages, setPdfNumPages] = useState(null);
   const [isCanvasReady, setIsCanvasReady] = useState(false);
+  const [initialProgressCompleted, setInitialProgressCompleted] = useState(false);
 
   useEffect(() => {
     const loadChapter = async () => {
@@ -52,16 +54,31 @@ const LearningPage = ({ authenticated }) => {
 
       try {
         const API_URL = import.meta.env.VITE_API_URL ;
-        const response = await fetch(`${API_URL}/api/courses/${courseId}/chapters/${chapterId}`, {
-          credentials: 'include'
-        });
+        const [chapterResponse, progressResponse] = await Promise.all([
+          fetch(`${API_URL}/api/courses/${courseId}/chapters/${chapterId}`, {
+            credentials: 'include'
+          }),
+          fetch(`${API_URL}/api/courses/${courseId}/chapters/${chapterId}/progress`, {
+            credentials: 'include'
+          })
+        ]);
 
-        if (response.ok) {
-          const chapter = await response.json();
+        if (chapterResponse.ok) {
+          const chapter = await chapterResponse.json();
           const courseResponse = await fetch(`${API_URL}/api/courses/${courseId}`, {
             credentials: 'include'
           });
           
+          // Resume from last page if progress exists
+          if (progressResponse.ok) {
+            const progress = await progressResponse.json();
+            if (progress && progress.status === 'completed') {
+              setInitialProgressCompleted(true);
+            } else if (progress && progress.lastPageNumber > 0) {
+              setPdfPageNumber(progress.lastPageNumber);
+            }
+          }
+
           if (courseResponse.ok) {
             const course = await courseResponse.json();
             setSelectedChapter({
@@ -211,6 +228,7 @@ const LearningPage = ({ authenticated }) => {
             pdfNumPages={pdfNumPages}
             onOpenLab={handleOpenLab}
             onOpenFinalProject={handleOpenFinalProject}
+            initialProgressCompleted={initialProgressCompleted}
           />
         </Suspense>
       </ErrorBoundary>
@@ -219,7 +237,7 @@ const LearningPage = ({ authenticated }) => {
 };
 
 // Chapters Page Component
-const ChaptersPage = ({ authenticated }) => {
+const ChaptersPage = ({ authenticated, userRole }) => {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const [course, setCourse] = useState(null);
@@ -279,6 +297,7 @@ const ChaptersPage = ({ authenticated }) => {
       course={course}
       onSelectChapter={handleSelectChapter}
       onBackToHome={() => navigate("/")}
+      userRole={userRole}
     />
   );
 };
@@ -507,7 +526,7 @@ const FinalProjectRoute = ({ authenticated }) => {
   );
 };
 
-export const AppRouter = ({ authenticated, authChecking, capabilityCheckDone, capabilities, onRetryCapabilityCheck, onLoginSuccess }) => {
+export const AppRouter = ({ authenticated, authChecking, userRole, capabilityCheckDone, capabilities, onRetryCapabilityCheck, onLoginSuccess }) => {
   const navigate = useNavigate();
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
 
@@ -616,7 +635,7 @@ export const AppRouter = ({ authenticated, authChecking, capabilityCheckDone, ca
       {/* Protected routes */}
       <Route path="/courses/:courseId/chapters" element={
         <ProtectedRoute authenticated={authenticated}>
-          <ChaptersPage authenticated={authenticated} />
+          <ChaptersPage authenticated={authenticated} userRole={userRole} />
         </ProtectedRoute>
       } />
 
@@ -653,6 +672,12 @@ export const AppRouter = ({ authenticated, authChecking, capabilityCheckDone, ca
       <Route path="/courses/:courseId/chapters/:chapterId/quiz" element={
         <ProtectedRoute authenticated={authenticated}>
           <QuizPage />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/courses/:courseId/chapters/:chapterId/quiz/manage" element={
+        <ProtectedRoute authenticated={authenticated}>
+          <QuizManager />
         </ProtectedRoute>
       } />
 

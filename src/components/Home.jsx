@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { logout, getUserEmail } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL ;
 
 export const Home = ({ onStartLearning }) => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,38 +44,41 @@ export const Home = ({ onStartLearning }) => {
         const coursesData = await coursesResponse.json();
         const coursesArray = Array.isArray(coursesData) ? coursesData : [coursesData];
         
-        // For each course, fetch its chapters AND labs
+        // For each course, fetch its chapters, labs, AND progress
         const coursesWithChapters = await Promise.all(
           coursesArray.map(async (course) => {
             try {
               let chapters = [];
               let labs = [];
+              let progress = null;
               
               // Only fetch chapters if user is enrolled
               if (course.isEnrolled) {
-                // Fetch chapters
-                const chaptersResponse = await fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
-                  credentials: 'include' // Important: send session cookie
-                });
+                // Fetch chapters, labs, and progress in parallel
+                const [chaptersResponse, labsResponse, progressResponse] = await Promise.all([
+                  fetch(`${API_URL}/api/courses/${course.id}/chapters`, {
+                    credentials: 'include'
+                  }),
+                  fetch(`${API_URL}/api/courses/${course.id}/labs`, {
+                    credentials: 'include'
+                  }).catch(() => null),
+                  fetch(`${API_URL}/api/courses/${course.id}/progress`, {
+                    credentials: 'include'
+                  }).catch(() => null)
+                ]);
+
                 if (chaptersResponse.ok) {
                   chapters = await chaptersResponse.json();
                   chapters = Array.isArray(chapters) ? chapters : [];
                 }
                 
-                // Fetch labs for enrolled courses
-                try {
-                  const labsResponse = await fetch(`${API_URL}/api/courses/${course.id}/labs`, {
-                    credentials: 'include'
-                  });
-                  if (labsResponse.ok) {
-                    labs = await labsResponse.json();
-                    labs = Array.isArray(labs) ? labs : [];
-                    console.log(`[Home] Loaded ${labs.length} labs for course ${course.id} (${course.courseName})`);
-                  } else {
-                    console.error(`[Home] Failed to load labs for course ${course.id}:`, labsResponse.status, labsResponse.statusText);
-                  }
-                } catch (err) {
-                  console.error(`[Home] Error loading labs for course ${course.id}:`, err);
+                if (labsResponse && labsResponse.ok) {
+                  labs = await labsResponse.json();
+                  labs = Array.isArray(labs) ? labs : [];
+                }
+
+                if (progressResponse && progressResponse.ok) {
+                  progress = await progressResponse.json();
                 }
               }
               
@@ -81,11 +86,12 @@ export const Home = ({ onStartLearning }) => {
                 ...course,
                 chapters,
                 labs,
-                hasLabs: labs.length > 0
+                hasLabs: labs.length > 0,
+                progress
               };
             } catch (err) {
               console.error(`Error loading data for course ${course.id}:`, err);
-              return { ...course, chapters: [], labs: [], hasLabs: false };
+              return { ...course, chapters: [], labs: [], hasLabs: false, progress: null };
             }
           })
         );
@@ -375,17 +381,42 @@ export const Home = ({ onStartLearning }) => {
                         }`
                       : "Aucune description disponible"}
                   </p>
-                  {/* Enrollment Status */}
+                  {/* Enrollment Status & Progress */}
                   {course.isEnrolled && (
                     <div className="mb-4">
-                      <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        <i className="fas fa-check-circle mr-1"></i>
-                        Inscrit
-                      </span>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          Inscrit
+                        </span>
+                        {course.progress && course.progress.overallPercentage > 0 && (
+                          <span className="text-xs font-bold text-pink-600">
+                            {Math.round(course.progress.overallPercentage)}% terminé
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Progress Bar */}
+                      {course.progress && course.progress.overallPercentage > 0 && (
+                        <div className="mb-3">
+                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div
+                              className={`h-2.5 rounded-full transition-all duration-500 ${
+                                course.progress.overallPercentage >= 100
+                                  ? 'bg-green-500'
+                                  : 'bg-gradient-to-r from-pink-500 to-purple-600'
+                              }`}
+                              style={{ width: `${Math.min(100, course.progress.overallPercentage)}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex items-center justify-between mt-1 text-xs text-gray-500">
+                            <span>{course.progress.completedChapters}/{course.progress.totalChapters} chapitres</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {hasChapters && course.isEnrolled && (
+                  {hasChapters && course.isEnrolled && !course.progress?.overallPercentage && (
                     <div className="mb-4 text-sm text-gray-500">
                       <span className="font-semibold text-gray-700">
                         Chapitres :
@@ -397,14 +428,70 @@ export const Home = ({ onStartLearning }) => {
                   {/* Action Buttons */}
                   {course.isEnrolled && (
                     <div className="space-y-3">
+                      {/* Smart Resume Button */}
+                      {course.progress?.overallPercentage > 0 && hasChapters && (() => {
+                        const chaptersArr = course.chapters || [];
+                        const progChapters = course.progress?.chapters || [];
+
+                        // Walk chapters in order to find the first incomplete step
+                        for (let i = 0; i < chaptersArr.length; i++) {
+                          const ch = chaptersArr[i];
+                          const prog = progChapters.find(cp => cp.chapterId === ch.id);
+
+                          // Chapter not completed → resume reading
+                          if (!prog || prog.status !== 'completed') {
+                            return (
+                              <button
+                                onClick={() => onStartLearning({ courseId: course.id, id: ch.id })}
+                                className="w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span>Reprendre : {ch.chapterName}</span>
+                              </button>
+                            );
+                          }
+
+                          // Chapter completed but quiz not passed → link to quiz
+                          const quizPassed = prog.hasQuiz ? prog.bestQuizScore >= 50 : true;
+                          if (!quizPassed) {
+                            return (
+                              <button
+                                onClick={() => navigate(`/courses/${course.id}/chapters/${ch.id}/quiz`)}
+                                className="w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                </svg>
+                                <span>Passer le Quiz : {ch.chapterName}</span>
+                              </button>
+                            );
+                          }
+                          // Chapter completed + quiz passed → continue to next
+                        }
+                        return null;
+                      })()}
+
                       {hasChapters && (
                         <button
                           onClick={() => {
                             onStartLearning(course);
                           }}
-                          className="w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 bg-pink-500 hover:bg-pink-600 text-white"
+                          className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                            course.progress?.overallPercentage > 0 && course.progress?.overallPercentage < 100
+                              ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                              : 'bg-pink-500 hover:bg-pink-600 text-white'
+                          }`}
                         >
-                          <span>Commencer l'apprentissage</span>
+                          <span>
+                            {course.progress?.overallPercentage >= 100
+                              ? 'Revoir le cours'
+                              : course.progress?.overallPercentage > 0
+                              ? 'Voir les chapitres'
+                              : "Commencer l'apprentissage"}
+                          </span>
                           <svg
                             className="w-5 h-5"
                             fill="none"

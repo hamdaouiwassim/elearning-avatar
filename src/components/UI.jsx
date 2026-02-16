@@ -16,6 +16,7 @@ export const UI = ({
   pdfScale,
   setPdfScale,
   pdfNumPages,
+  initialProgressCompleted,
 }) => {
   const navigate = useNavigate();
   const { chat, loading, cameraZoomed, setCameraZoomed, message, avatarPosition, setAvatarPosition, setAudioElement, setAudioId, setLipSyncUrl, audioElement, avatarScreenPosition } = useChat();
@@ -157,6 +158,53 @@ export const UI = ({
   const [currentPageAudio, setCurrentPageAudio] = useState(null); // Current page being played
   const [isChapterComplete, setIsChapterComplete] = useState(false); // Track if all pages have been read
 
+  // Chapter completion overlay state
+  const [showCompletionOverlay, setShowCompletionOverlay] = useState(false);
+  const [hasQuizQuestions, setHasQuizQuestions] = useState(false);
+  const [quizBestAttempt, setQuizBestAttempt] = useState(null);
+
+  // Check quiz status when chapter completes
+  useEffect(() => {
+    if (!isChapterComplete) {
+      setShowCompletionOverlay(false);
+      return;
+    }
+    const courseId = selectedCourse?.courseId;
+    const chapterId = selectedCourse?.id;
+    if (!courseId || !chapterId) return;
+
+    const checkQuizStatus = async () => {
+      try {
+        // Check if quiz questions exist
+        const quizResponse = await fetch(`${API_URL}/api/courses/${courseId}/chapters/${chapterId}/quiz`, {
+          credentials: 'include'
+        });
+        if (quizResponse.ok) {
+          const quizData = await quizResponse.json();
+          const questionsList = quizData.questions || quizData;
+          const has = Array.isArray(questionsList) && questionsList.length > 0;
+          setHasQuizQuestions(has);
+
+          if (has) {
+            // Check user's best attempt
+            const attemptsResponse = await fetch(`${API_URL}/api/courses/${courseId}/chapters/${chapterId}/quiz/attempts`, {
+              credentials: 'include'
+            });
+            if (attemptsResponse.ok) {
+              const data = await attemptsResponse.json();
+              setQuizBestAttempt(data.bestAttempt || null);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[UI] Failed to check quiz:', error.message);
+      }
+      setShowCompletionOverlay(true);
+    };
+
+    checkQuizStatus();
+  }, [isChapterComplete, selectedCourse?.courseId, selectedCourse?.id]);
+
   // Chapters sidebar state
   const [chapters, setChapters] = useState([]);
   const [chaptersLoading, setChaptersLoading] = useState(false);
@@ -168,6 +216,70 @@ export const UI = ({
   const [checkingFinalProject, setCheckingFinalProject] = useState(false);
   const [showFinalProjectView, setShowFinalProjectView] = useState(false);
 
+  // Save progress whenever page changes (skip if chapter already completed)
+  const progressSaveTimeoutRef = useRef(null);
+  const chapterAlreadyCompleted = useRef(initialProgressCompleted || false);
+  useEffect(() => {
+    if (!pdfPageNumber || !pdfNumPages || !selectedCourse?.courseId || !selectedCourse?.id) return;
+    if (chapterAlreadyCompleted.current) return;
+
+    // Debounce to avoid saving on every rapid page change
+    if (progressSaveTimeoutRef.current) {
+      clearTimeout(progressSaveTimeoutRef.current);
+    }
+
+    progressSaveTimeoutRef.current = setTimeout(() => {
+      const saveProgress = async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/courses/${selectedCourse.courseId}/chapters/${selectedCourse.id}/progress`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              lastPageNumber: pdfPageNumber,
+              totalPages: pdfNumPages
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'completed') {
+              chapterAlreadyCompleted.current = true;
+            }
+          }
+        } catch (error) {
+          console.warn('[Progress] Failed to save progress:', error.message);
+        }
+      };
+      saveProgress();
+    }, 1000);
+
+    return () => {
+      if (progressSaveTimeoutRef.current) {
+        clearTimeout(progressSaveTimeoutRef.current);
+      }
+    };
+  }, [pdfPageNumber, pdfNumPages, selectedCourse?.courseId, selectedCourse?.id]);
+
+  // Save progress on unmount (user leaves the page) - skip if already completed
+  useEffect(() => {
+    return () => {
+      if (chapterAlreadyCompleted.current) return;
+      if (pdfPageNumber && pdfNumPages && selectedCourse?.courseId && selectedCourse?.id) {
+        const beacon = JSON.stringify({
+          lastPageNumber: pdfPageNumber,
+          totalPages: pdfNumPages
+        });
+        try {
+          navigator.sendBeacon(
+            `${API_URL}/api/courses/${selectedCourse.courseId}/chapters/${selectedCourse.id}/progress`,
+            new Blob([beacon], { type: 'application/json' })
+          );
+        } catch (e) {
+          // sendBeacon might fail silently, that's okay
+        }
+      }
+    };
+  }, [pdfPageNumber, pdfNumPages, selectedCourse?.courseId, selectedCourse?.id]);
 
   // Check for final project
   useEffect(() => {
@@ -429,6 +541,7 @@ export const UI = ({
       setPageTimings([]); // Reset page timings
       setCurrentPageAudio(null); // Reset current page audio
       setIsChapterComplete(false); // Reset chapter completion status
+      chapterAlreadyCompleted.current = initialProgressCompleted || false; // Reset completed flag
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
@@ -584,7 +697,7 @@ export const UI = ({
 
     setTtsLoading(true);
     try {
-      const startPage = currentPageAudio || 1;
+      const startPage = currentPageAudio || pdfPageNumber || 1;
       if (setPdfPageNumber) {
         setPdfPageNumber(startPage);
       }
@@ -1391,22 +1504,6 @@ export const UI = ({
               </div>
             )}
 
-            {/* Quiz Button (Footer) */}
-            {selectedCourse?.id && selectedCourse?.courseId && (
-              <div className="p-4 border-t border-gray-200 bg-gray-50">
-                <button
-                  onClick={() => navigate(`/courses/${selectedCourse.courseId}/chapters/${selectedCourse.id}/quiz`)}
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white shadow-md py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all font-bold text-sm transform hover:scale-[1.02]"
-                  title="Passer le quiz du chapitre"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                  Passer le Quiz
-                </button>
-              </div>
-            )}
-
             {/* Final Project Button (Footer) */}
             {finalProject && onOpenFinalProject && (
               <div className="p-4 border-t border-gray-200 bg-gray-50">
@@ -2005,6 +2102,101 @@ export const UI = ({
           />
         </div>
       </div>
+
+      {/* Chapter Completion Overlay */}
+      {showCompletionOverlay && isChapterComplete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-auto bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
+            {/* Success Icon */}
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Chapitre terminé !</h3>
+
+            {/* Case 1: Quiz exists and user already passed it - show results */}
+            {hasQuizQuestions && quizBestAttempt && quizBestAttempt.percentage >= 50 ? (
+              <div>
+                <p className="text-gray-600 mb-4">Vous avez déjà réussi le quiz de ce chapitre.</p>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg ${
+                      quizBestAttempt.percentage >= 80 ? 'bg-green-500' : 'bg-yellow-500'
+                    }`}>
+                      {Math.round(quizBestAttempt.percentage)}%
+                    </div>
+                  </div>
+                  <p className="text-green-800 font-semibold text-lg">
+                    {quizBestAttempt.score}/{quizBestAttempt.totalQuestions} bonnes réponses
+                  </p>
+                  <p className="text-green-600 text-sm mt-1">
+                    {quizBestAttempt.percentage >= 80 ? 'Excellent travail !' : 'Quiz réussi !'}
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => navigate(`/courses/${selectedCourse.courseId}/chapters/${selectedCourse.id}/quiz`)}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Repasser le Quiz
+                  </button>
+                  <button
+                    onClick={() => setShowCompletionOverlay(false)}
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-xl transition-colors"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+
+            /* Case 2: Quiz exists but not passed yet (or failed) - show "Passer le Quiz" */
+            ) : hasQuizQuestions ? (
+              <div>
+                <p className="text-gray-600 mb-6">
+                  {quizBestAttempt
+                    ? `Votre meilleur score : ${Math.round(quizBestAttempt.percentage)}%. Réessayez pour améliorer votre résultat !`
+                    : 'Testez vos connaissances avec le quiz !'}
+                </p>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => navigate(`/courses/${selectedCourse.courseId}/chapters/${selectedCourse.id}/quiz`)}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3 shadow-lg"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    Passer le Quiz
+                  </button>
+                  <button
+                    onClick={() => setShowCompletionOverlay(false)}
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-xl transition-colors"
+                  >
+                    Plus tard
+                  </button>
+                </div>
+              </div>
+
+            /* Case 3: No quiz for this chapter */
+            ) : (
+              <div>
+                <p className="text-gray-600 mb-6">
+                  Félicitations, vous avez terminé ce chapitre !
+                </p>
+                <button
+                  onClick={() => setShowCompletionOverlay(false)}
+                  className="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
+                >
+                  Continuer
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Sidebar Toggle Button (when sidebar is closed) */}
       {selectedCourse?.courseId && !sidebarOpen && (

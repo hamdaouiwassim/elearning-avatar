@@ -15,12 +15,14 @@ export const checkAuthStatus = async () => {
 
     if (response.ok) {
       const data = await response.json();
-      return data.authenticated === true;
+      if (data.authenticated === true) {
+        return { authenticated: true, role: data.role || 'user' };
+      }
     }
-    return false;
+    return { authenticated: false, role: null };
   } catch (error) {
     console.error("Error checking auth status:", error);
-    return false;
+    return { authenticated: false, role: null };
   }
 };
 

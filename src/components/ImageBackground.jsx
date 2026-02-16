@@ -53,8 +53,16 @@ export const ImageBackground = ({ document, pageNumber, setPageNumber, scale, se
           }
           setWebpImageUrls(urls);
           
+          // Only reset page number if current value is out of bounds;
+          // preserve it when resuming from saved progress
           if (setPageNumber) {
-            setPageNumber(1);
+            setPageNumber((prev) => {
+              const current = typeof prev === 'number' ? prev : 1;
+              if (current < 1 || current > pageCount) {
+                return 1;
+              }
+              return current;
+            });
           }
         } else {
           // No WebP images available
